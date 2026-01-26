@@ -1,0 +1,1709 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#fafafa" />
+    <link
+      rel="icon"
+      type="image/svg+xml"
+      href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2064%2064%22%3E%3Crect%20x%3D%228%22%20y%3D%228%22%20width%3D%2248%22%20height%3D%2248%22%20rx%3D%2212%22%20fill%3D%22%230a0a0a%22%2F%3E%3Cpath%20d%3D%22M22%2022h20v4H22zm0%208h20v4H22zm0%208h14v4H22z%22%20fill%3D%22%23fafafa%22%2F%3E%3C%2Fsvg%3E"
+    />
+    <title>Nutrition Ledger · 可溯源营养数据 MVP</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      :root {
+        --black: #0a0a0a;
+        --white: #fafafa;
+        --gray-100: #f5f5f5;
+        --gray-200: #e8e8e8;
+        --gray-400: #999;
+        --gray-600: #666;
+        --gray-800: #333;
+        --measure: 980px;
+        --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+          monospace;
+      }
+
+      html {
+        scroll-behavior: smooth;
+      }
+
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+          "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+        background: var(--white);
+        color: var(--black);
+        line-height: 1.8;
+        font-size: 16px;
+        -webkit-font-smoothing: antialiased;
+        text-rendering: optimizeLegibility;
+      }
+
+      ::selection {
+        background: var(--black);
+        color: var(--white);
+      }
+
+      a {
+        color: inherit;
+        text-decoration: none;
+        border-bottom: 1px solid var(--gray-200);
+      }
+
+      :where(a, button, input, textarea, select):focus-visible {
+        outline: 2px solid var(--black);
+        outline-offset: 2px;
+      }
+
+      .container {
+        max-width: var(--measure);
+        margin: 0 auto;
+        padding: 0 24px;
+      }
+
+      .header {
+        position: sticky;
+        top: 0;
+        z-index: 100;
+        background: rgba(250, 250, 250, 0.92);
+        backdrop-filter: blur(12px);
+        border-bottom: 1px solid var(--gray-200);
+      }
+
+      .header-inner {
+        max-width: var(--measure);
+        margin: 0 auto;
+        padding: 16px 24px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 14px;
+        flex-wrap: wrap;
+      }
+
+      .logo {
+        font-size: 11px;
+        letter-spacing: 4px;
+        text-transform: uppercase;
+        font-weight: 650;
+        color: var(--gray-600);
+        display: inline-flex;
+        gap: 10px;
+        align-items: baseline;
+      }
+
+      .tag {
+        font-size: 10px;
+        letter-spacing: 2px;
+        text-transform: uppercase;
+        padding: 6px 10px;
+        border: 1px solid var(--gray-200);
+        color: var(--gray-600);
+      }
+
+      .actions {
+        display: inline-flex;
+        gap: 10px;
+        align-items: center;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+      }
+
+      .btn {
+        appearance: none;
+        border: 1px solid var(--black);
+        background: transparent;
+        color: var(--black);
+        padding: 9px 12px;
+        border-radius: 999px;
+        font-size: 12px;
+        letter-spacing: 1px;
+        cursor: pointer;
+      }
+
+      .btn:hover {
+        background: var(--black);
+        color: var(--white);
+      }
+
+      .btn.ghost {
+        border-color: var(--gray-200);
+        color: var(--gray-600);
+      }
+
+      .btn.ghost:hover {
+        border-color: var(--black);
+        background: var(--black);
+        color: var(--white);
+      }
+
+      .btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+
+      .hero {
+        max-width: var(--measure);
+        margin: 0 auto;
+        padding: 72px 24px 40px;
+        text-align: center;
+      }
+
+      .hero-label {
+        font-size: 11px;
+        letter-spacing: 6px;
+        text-transform: uppercase;
+        color: var(--gray-400);
+        margin-bottom: 18px;
+      }
+
+      .hero h1 {
+        font-size: clamp(28px, 4.8vw, 44px);
+        font-weight: 300;
+        letter-spacing: 1.6px;
+        line-height: 1.2;
+        margin-bottom: 10px;
+      }
+
+      .hero h1 strong {
+        font-weight: 650;
+      }
+
+      .hero-sub {
+        font-size: 13px;
+        color: var(--gray-600);
+        letter-spacing: 0.8px;
+        max-width: 72ch;
+        margin: 0 auto;
+      }
+
+      hr {
+        border: none;
+        border-top: 1px solid var(--gray-200);
+        margin: 0;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: 340px 1fr;
+        gap: 18px;
+        padding: 24px 0 72px;
+      }
+
+      @media (max-width: 940px) {
+        .grid {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      .panel {
+        border: 1px solid var(--gray-200);
+        background: rgba(250, 250, 250, 0.9);
+      }
+
+      .panel-head {
+        padding: 14px 14px 12px;
+        border-bottom: 1px solid var(--gray-200);
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 10px;
+      }
+
+      .panel-title {
+        font-size: 10px;
+        letter-spacing: 3px;
+        text-transform: uppercase;
+        color: var(--gray-400);
+        font-weight: 650;
+      }
+
+      .panel-body {
+        padding: 14px;
+      }
+
+      .field {
+        display: grid;
+        gap: 6px;
+      }
+
+      .label {
+        font-size: 10px;
+        letter-spacing: 2.4px;
+        text-transform: uppercase;
+        color: var(--gray-600);
+      }
+
+      input,
+      textarea,
+      select {
+        width: 100%;
+        border: 1px solid var(--gray-200);
+        background: rgba(245, 245, 245, 0.75);
+        color: var(--black);
+        padding: 10px 12px;
+        border-radius: 0;
+        font-size: 14px;
+        line-height: 1.5;
+        font-family: inherit;
+      }
+
+      textarea {
+        min-height: 120px;
+        resize: vertical;
+      }
+
+      .muted {
+        color: var(--gray-600);
+      }
+
+      .mono {
+        font-family: var(--mono);
+      }
+
+      .kpi {
+        display: grid;
+        gap: 6px;
+        padding: 12px;
+        border: 1px solid var(--gray-200);
+        background: rgba(245, 245, 245, 0.6);
+      }
+
+      .kpi .k {
+        font-size: 10px;
+        letter-spacing: 3px;
+        text-transform: uppercase;
+        color: var(--gray-600);
+      }
+
+      .kpi .v {
+        font-size: 14px;
+        font-weight: 650;
+      }
+
+      .list {
+        display: grid;
+        gap: 10px;
+      }
+
+      .food {
+        border: 1px solid var(--gray-200);
+        background: rgba(250, 250, 250, 0.95);
+        padding: 10px 12px;
+        cursor: pointer;
+        display: grid;
+        gap: 2px;
+      }
+
+      .food[aria-current="true"] {
+        border-color: var(--black);
+      }
+
+      .food-title {
+        font-size: 14px;
+        font-weight: 650;
+        letter-spacing: 0.2px;
+      }
+
+      .food-meta {
+        font-size: 12px;
+        color: var(--gray-600);
+      }
+
+      .split {
+        display: grid;
+        gap: 14px;
+      }
+
+      .subsection {
+        border-top: 1px solid var(--gray-200);
+        padding-top: 14px;
+        display: grid;
+        gap: 10px;
+      }
+
+      .subhead {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        align-items: baseline;
+        flex-wrap: wrap;
+      }
+
+      .subhead h2 {
+        font-size: 18px;
+        letter-spacing: 0.6px;
+        font-weight: 400;
+      }
+
+      .hint {
+        font-size: 12px;
+        color: var(--gray-600);
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+      }
+
+      th,
+      td {
+        text-align: left;
+        padding: 10px 8px;
+        border-bottom: 1px solid var(--gray-200);
+        vertical-align: top;
+      }
+
+      th {
+        font-size: 10px;
+        letter-spacing: 3px;
+        text-transform: uppercase;
+        color: var(--gray-600);
+        font-weight: 650;
+      }
+
+      .pillrow {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+      }
+
+      .pill {
+        font-size: 10px;
+        letter-spacing: 2px;
+        text-transform: uppercase;
+        padding: 6px 10px;
+        border: 1px solid var(--gray-200);
+        color: var(--gray-600);
+        background: rgba(250, 250, 250, 0.95);
+      }
+
+      .pill.strong {
+        border-color: var(--black);
+        color: var(--black);
+      }
+
+      .row-actions {
+        display: inline-flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: flex-end;
+      }
+
+      .tiny {
+        padding: 6px 10px;
+        font-size: 11px;
+      }
+
+      .dialog-backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(10, 10, 10, 0.55);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        padding: 18px;
+        z-index: 1000;
+      }
+
+      .dialog-backdrop[aria-hidden="false"] {
+        display: flex;
+      }
+
+      .dialog {
+        width: min(860px, 96vw);
+        max-height: 88vh;
+        overflow: auto;
+        background: var(--white);
+        border: 1px solid var(--gray-200);
+      }
+
+      .dialog-head {
+        position: sticky;
+        top: 0;
+        background: rgba(250, 250, 250, 0.92);
+        backdrop-filter: blur(10px);
+        border-bottom: 1px solid var(--gray-200);
+        padding: 14px 14px 12px;
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        align-items: baseline;
+      }
+
+      .dialog-title {
+        font-size: 12px;
+        letter-spacing: 3px;
+        text-transform: uppercase;
+        color: var(--gray-600);
+        font-weight: 650;
+      }
+
+      .dialog-body {
+        padding: 14px;
+      }
+
+      .history-item {
+        border: 1px solid var(--gray-200);
+        background: rgba(245, 245, 245, 0.55);
+        padding: 12px;
+        display: grid;
+        gap: 6px;
+        margin-bottom: 10px;
+      }
+
+      .history-top {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+
+      .history-val {
+        font-weight: 650;
+      }
+
+      .history-meta {
+        font-size: 12px;
+        color: var(--gray-600);
+      }
+
+      .thumb {
+        width: 84px;
+        height: 84px;
+        border: 1px solid var(--gray-200);
+        background: rgba(250, 250, 250, 0.9);
+        object-fit: cover;
+      }
+
+      .lb {
+        position: fixed;
+        inset: 0;
+        background: rgba(10, 10, 10, 0.74);
+        display: none;
+        z-index: 1200;
+      }
+
+      .lb[aria-hidden="false"] {
+        display: block;
+      }
+
+      .lb-stage {
+        position: absolute;
+        inset: 18px;
+        background: rgba(250, 250, 250, 0.98);
+        border: 1px solid rgba(250, 250, 250, 0.4);
+        overflow: hidden;
+      }
+
+      .lb-canvas {
+        position: absolute;
+        inset: 0;
+        cursor: grab;
+      }
+
+      .lb-canvas:active {
+        cursor: grabbing;
+      }
+
+      .lb-inner {
+        position: absolute;
+        left: 0;
+        top: 0;
+        transform-origin: 0 0;
+        will-change: transform;
+      }
+
+      .lb-inner img {
+        display: block;
+        max-width: none;
+        max-height: none;
+      }
+
+      .lb-bar {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        border-top: 1px solid var(--gray-200);
+        background: rgba(250, 250, 250, 0.92);
+        padding: 10px 12px;
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: baseline;
+        flex-wrap: wrap;
+      }
+
+      .lb-bar .meta {
+        font-size: 12px;
+        color: var(--gray-600);
+      }
+
+      @media print {
+        .header,
+        .actions,
+        .btn,
+        .panel-head button,
+        .row-actions,
+        .subsection .btn,
+        .dialog-backdrop,
+        .lb {
+          display: none !important;
+        }
+
+        .grid {
+          grid-template-columns: 1fr;
+        }
+
+        .panel {
+          border: 1px solid #000;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="header">
+      <div class="header-inner">
+        <div class="logo">
+          <span>ZON</span>
+          <span class="tag">Nutrition Ledger · MVP</span>
+        </div>
+        <div class="actions">
+          <button class="btn ghost" id="btn-export" type="button">导出 JSON</button>
+          <button class="btn" id="btn-new-food" type="button">新建食物</button>
+        </div>
+      </div>
+    </header>
+
+    <main class="container">
+      <div class="hero">
+        <div class="hero-label">LOCAL‑FIRST · TRACEABLE NUTRITION VALUES</div>
+        <h1><strong>每条数值</strong>可溯源、可回滚、可选来源</h1>
+        <p class="hero-sub">
+          账本是 JSONL 追加写：你“修改”不会覆盖旧值，而是新增一条观测记录，并把当前选择指针切过去（随时切回）。
+        </p>
+      </div>
+
+      <hr />
+
+      <div class="grid">
+        <section class="panel" aria-label="Foods">
+          <div class="panel-head">
+            <div class="panel-title">Foods</div>
+            <div class="pillrow">
+              <span class="pill" id="pill-r2">R2: checking</span>
+            </div>
+          </div>
+          <div class="panel-body">
+            <div class="field">
+              <div class="label">Search</div>
+              <input id="food-search" type="search" placeholder="按名称/条码过滤…" autocomplete="off" />
+            </div>
+            <div style="height: 12px"></div>
+            <div class="list" id="foods"></div>
+            <div style="height: 12px"></div>
+            <div class="kpi">
+              <div class="k">Data</div>
+              <div class="v mono" id="kpi-data">—</div>
+              <div class="muted" style="font-size: 12px">
+                数据落盘在 <span class="mono">html/nutrition-ledger-mvp/data/</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel" aria-label="Details">
+          <div class="panel-head">
+            <div class="panel-title">Detail</div>
+            <div class="pillrow" id="food-pills"></div>
+          </div>
+          <div class="panel-body">
+            <div class="split" id="detail">
+              <div class="kpi">
+                <div class="k">Start</div>
+                <div class="v">选择一个食物，或新建</div>
+                <div class="muted" style="font-size: 12px">
+                  推荐流程：上传营养成分表图片（可选）→ 粘贴 OCR 文本 → 解析 → 校对后写入多条营养数值。
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <div class="dialog-backdrop" id="dlg-backdrop" aria-hidden="true">
+      <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="dlg-title">
+        <div class="dialog-head">
+          <div class="dialog-title" id="dlg-title">History</div>
+          <div class="row-actions">
+            <button class="btn ghost tiny" id="dlg-close" type="button">关闭</button>
+          </div>
+        </div>
+        <div class="dialog-body" id="dlg-body"></div>
+      </div>
+    </div>
+
+    <div class="lb" id="lb" aria-hidden="true">
+      <div class="lb-stage">
+        <div class="lb-canvas" id="lb-canvas">
+          <div class="lb-inner" id="lb-inner"></div>
+        </div>
+        <div class="lb-bar">
+          <div class="meta" id="lb-meta">ESC 关闭 · 滚轮缩放 · 拖拽移动 · 双击重置</div>
+          <button class="btn tiny" type="button" id="lb-close">关闭</button>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const $ = (sel, root = document) => root.querySelector(sel);
+      const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
+
+      const state = {
+        bootstrap: null,
+        foods: [],
+        nutrients: [],
+        selectedFoodId: "",
+        selectedFoodView: null,
+        basis: { kind: "per-100g" },
+        r2: { available: false },
+        evidenceCache: {},
+      };
+
+      const api = {
+        async get(path) {
+          const res = await fetch(path, { headers: { "Cache-Control": "no-store" } });
+          const json = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`);
+          return json;
+        },
+        async post(path, body) {
+          const res = await fetch(path, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+            body: JSON.stringify(body || {}),
+          });
+          const json = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`);
+          return json;
+        },
+      };
+
+      function fmt(dt) {
+        const d = new Date(dt);
+        if (Number.isNaN(d.getTime())) return String(dt || "");
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
+          d.getDate()
+        ).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(
+          2,
+          "0"
+        )}`;
+      }
+
+      function downloadJson(filename, obj) {
+        const blob = new Blob([JSON.stringify(obj, null, 2)], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+      }
+
+      function setPillR2(r2) {
+        const el = $("#pill-r2");
+        state.r2 = r2 || { available: false };
+        if (!el) return;
+        if (r2?.available) {
+          el.textContent = r2.publicBase ? "R2: ready" : "R2: ready (no public base)";
+          el.classList.add("strong");
+        } else {
+          el.textContent = "R2: off";
+          el.classList.remove("strong");
+        }
+      }
+
+      function renderFoods() {
+        const list = $("#foods");
+        if (!list) return;
+        const q = String($("#food-search")?.value || "").trim().toLowerCase();
+        const filtered = state.foods.filter((f) => {
+          const hay = `${f.label || ""} ${f.barcode || ""} ${f.brand || ""}`.toLowerCase();
+          return !q || hay.includes(q);
+        });
+
+        list.innerHTML = "";
+        for (const food of filtered) {
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "food";
+          btn.setAttribute("aria-current", food.id === state.selectedFoodId ? "true" : "false");
+          btn.innerHTML = `<div class="food-title">${escapeHtml(food.label || "(未命名)")}</div>
+            <div class="food-meta">
+              <span class="mono">${escapeHtml(food.barcode || "—")}</span>
+              ${food.brand ? ` · ${escapeHtml(food.brand)}` : ""}
+            </div>`;
+          btn.addEventListener("click", () => selectFood(food.id));
+          list.appendChild(btn);
+        }
+
+        $("#kpi-data").textContent = `${state.foods.length} foods`;
+      }
+
+      function renderFoodPills(view) {
+        const el = $("#food-pills");
+        if (!el) return;
+        el.innerHTML = "";
+        if (!view?.food) return;
+
+        const food = view.food;
+        const pills = [
+          { text: food.kind || "food", strong: true },
+          { text: food.barcode ? `barcode:${food.barcode}` : "custom", strong: false, mono: true },
+          { text: food.brand ? `brand:${food.brand}` : "", strong: false },
+        ].filter((p) => p.text);
+
+        for (const p of pills) {
+          const span = document.createElement("span");
+          span.className = `pill ${p.strong ? "strong" : ""} ${p.mono ? "mono" : ""}`.trim();
+          span.textContent = p.text;
+          el.appendChild(span);
+        }
+      }
+
+      function escapeHtml(s) {
+        return String(s || "")
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#39;");
+      }
+
+      function basisOptions() {
+        return [
+          { kind: "per-100g", label: "每 100g" },
+          { kind: "per-100ml", label: "每 100ml" },
+          { kind: "per-serving", label: "每份" },
+        ];
+      }
+
+      function makeSelectionKey(foodId, nutrientId, basis) {
+        const kind = basis?.kind || "unknown";
+        if (kind === "per-serving" && basis?.servingSize?.quantity && basis?.servingSize?.unit) {
+          return `${foodId}|${nutrientId}|per-serving:${basis.servingSize.quantity}${basis.servingSize.unit}`;
+        }
+        return `${foodId}|${nutrientId}|${kind === "per-100g" ? "per-100g" : kind === "per-100ml" ? "per-100ml" : kind === "per-serving" ? "per-serving" : "unknown"}`;
+      }
+
+      function findEffective(view, nutrientId, basis) {
+        if (!view?.effective) return null;
+        const key = makeSelectionKey(view.food.id, nutrientId, basis);
+        return view.effective[key] || null;
+      }
+
+      function groupObservations(view, nutrientId, basis) {
+        const key = makeSelectionKey(view.food.id, nutrientId, basis);
+        const list = (view.observations || []).filter((o) => makeSelectionKey(o.foodId, o.nutrientId, o.basis) === key);
+        list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        return list;
+      }
+
+      async function selectFood(foodId) {
+        state.selectedFoodId = foodId;
+        renderFoods();
+        const view = await api.get(`/api/foods/${encodeURIComponent(foodId)}`);
+        state.selectedFoodView = view;
+        state.evidenceCache = view.evidence || {};
+        renderFoodPills(view);
+        renderDetail(view);
+      }
+
+      function renderDetail(view) {
+        const root = $("#detail");
+        if (!root) return;
+        if (!view?.food) {
+          root.innerHTML = `<div class="kpi"><div class="k">Start</div><div class="v">选择一个食物</div></div>`;
+          return;
+        }
+
+        const basis = state.basis || { kind: "per-100g" };
+        const amountIds = new Set([
+          "energy_kj",
+          "energy_kcal",
+          "protein_g",
+          "fat_g",
+          "carb_g",
+          "sodium_mg",
+        ]);
+        const nrvIds = new Set([
+          "energy_nrv_pct",
+          "protein_nrv_pct",
+          "fat_nrv_pct",
+          "carb_nrv_pct",
+          "sodium_nrv_pct",
+        ]);
+        const amountNutrients = state.nutrients.filter((n) => amountIds.has(n.id));
+        const nrvNutrients = state.nutrients.filter((n) => nrvIds.has(n.id));
+
+        const nutrientRows = amountNutrients
+          .filter((n) => n.id !== "energy_kcal")
+          .map((n) => renderNutrientRow(view, n, basis))
+          .join("");
+        const nrvRows = nrvNutrients.map((n) => renderNutrientRow(view, n, basis)).join("");
+
+        const evidenceInfo = renderEvidencePanel(view);
+
+        root.innerHTML = `
+          <div class="subhead">
+            <h2>${escapeHtml(view.food.label || "(未命名)")}</h2>
+            <div class="row-actions">
+              <select id="basis-select" class="mono tiny" style="border-radius:999px;padding:7px 10px">
+                ${basisOptions()
+                  .map(
+                    (b) =>
+                      `<option value="${escapeHtml(b.kind)}" ${b.kind === basis.kind ? "selected" : ""}>${escapeHtml(
+                        b.label
+                      )}</option>`
+                  )
+                  .join("")}
+              </select>
+              <button class="btn ghost tiny" type="button" id="btn-refresh">刷新</button>
+            </div>
+          </div>
+
+          <div class="subsection">
+            <div class="subhead">
+              <h2>当前营养（${escapeHtml(basisLabel(basis))}）</h2>
+              <div class="hint">点击“历史”可切换来源 / 回滚</div>
+            </div>
+            <table>
+              <thead>
+                <tr>
+                  <th>Nutrient</th>
+                  <th>Value</th>
+                  <th>Provenance</th>
+                  <th style="text-align:right">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${nutrientRows || `<tr><td colspan="4" class="muted">暂无数据</td></tr>`}
+              </tbody>
+            </table>
+          </div>
+
+          <div class="subsection">
+            <div class="subhead">
+              <h2>NRV%（${escapeHtml(basisLabel(basis))}）</h2>
+              <div class="hint">可选：从标签识别或手动录入（同样可追溯）</div>
+            </div>
+            <table>
+              <thead>
+                <tr>
+                  <th>Nutrient</th>
+                  <th>Value</th>
+                  <th>Provenance</th>
+                  <th style="text-align:right">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${nrvRows || `<tr><td colspan="4" class="muted">暂无数据</td></tr>`}
+              </tbody>
+            </table>
+          </div>
+
+          <div class="subsection">
+            <div class="subhead">
+              <h2>从标签文本导入（粘贴 OCR 结果）</h2>
+              <div class="row-actions">
+                <button class="btn ghost tiny" type="button" id="btn-parse">解析</button>
+                <button class="btn tiny" type="button" id="btn-save-parsed" disabled>写入观测</button>
+              </div>
+            </div>
+            <div class="hint">
+              建议把 iOS/微信的“复制文字”结果粘贴到这里；解析出来的数值会以多条 observation 写入，并自动设为当前选用值。
+            </div>
+            <div class="grid" style="grid-template-columns:1fr 1fr;gap:10px;padding:0">
+              <div class="field">
+                <div class="label">Basis Override</div>
+                <select id="import-basis">
+                  <option value="auto">auto（从文本识别）</option>
+                  <option value="per-100g">每 100g</option>
+                  <option value="per-100ml">每 100ml</option>
+                  <option value="per-serving">每份</option>
+                </select>
+              </div>
+              <div class="field">
+                <div class="label">Serving Size (optional)</div>
+                <input id="import-serving" placeholder="例如：250ml 或 30g" />
+              </div>
+            </div>
+            <div class="field">
+              <div class="label">Label Text</div>
+              <textarea id="label-text" placeholder="示例：每100g 能量 1500kJ 蛋白质 3.2g 脂肪 5.6g 碳水化合物 10.2g 钠 120mg"></textarea>
+            </div>
+            <div style="height: 10px"></div>
+            <div class="field">
+              <div class="label">Evidence (optional)</div>
+              <select id="label-evidence"></select>
+            </div>
+            <div style="height: 10px"></div>
+            <div class="grid" style="grid-template-columns:1fr 1fr;gap:10px;padding:0">
+              <div class="field">
+                <div class="label">Dataset Version (optional)</div>
+                <input id="import-version" placeholder="例如：2026-01-23" />
+              </div>
+              <div class="field">
+                <div class="label">Source Id (optional)</div>
+                <input id="import-sourceid" placeholder="条码字段/原始主键/…" />
+              </div>
+            </div>
+            <div style="height: 10px"></div>
+            <div id="parse-preview" class="kpi">
+              <div class="k">Preview</div>
+              <div class="v muted">—</div>
+            </div>
+          </div>
+
+          ${evidenceInfo}
+        `;
+
+        $("#btn-refresh")?.addEventListener("click", () => selectFood(view.food.id));
+        $("#basis-select")?.addEventListener("change", (e) => {
+          const v = String(e.target?.value || "per-100g");
+          state.basis = { kind: v };
+          renderDetail(view);
+        });
+        wireRowActions(view, basis);
+        wireLabelImport(view);
+        wireEvidenceCreate(view);
+      }
+
+      function basisLabel(basis) {
+        if (!basis || !basis.kind) return "—";
+        if (basis.kind === "per-100g") return "每 100g";
+        if (basis.kind === "per-100ml") return "每 100ml";
+        if (basis.kind === "per-serving") {
+          if (basis?.servingSize?.quantity && basis?.servingSize?.unit) {
+            return `每份（${basis.servingSize.quantity}${basis.servingSize.unit}）`;
+          }
+          return "每份";
+        }
+        return basis.kind;
+      }
+
+      function renderNutrientRow(view, nutrient, basis) {
+        const eff = findEffective(view, nutrient.id, basis);
+        const obs = eff?.observation || null;
+        const prov = obs ? `${obs.source || "?"} · ${obs.method || "?"}` : "—";
+        const val = obs ? `${escapeHtml(obs.value)} ${escapeHtml(obs.unit)}` : "—";
+        const when = obs?.createdAt ? fmt(obs.createdAt) : "";
+        return `<tr data-nutrient="${escapeHtml(nutrient.id)}">
+          <td>${escapeHtml(nutrient.label)} <span class="muted mono">(${escapeHtml(nutrient.id)})</span></td>
+          <td class="mono">${val}</td>
+          <td class="muted">${escapeHtml(prov)}${when ? ` · ${escapeHtml(when)}` : ""}</td>
+          <td style="text-align:right">
+            <span class="row-actions">
+              <button class="btn ghost tiny" type="button" data-action="history">历史</button>
+              <button class="btn tiny" type="button" data-action="edit">${obs ? "改值" : "新增"}</button>
+            </span>
+          </td>
+        </tr>`;
+      }
+
+      function wireRowActions(view, basis) {
+        const rows = $$("tr[data-nutrient]");
+        for (const row of rows) {
+          const nutrientId = row.getAttribute("data-nutrient");
+          row.querySelector('[data-action="history"]')?.addEventListener("click", () => openHistory(view, nutrientId, basis));
+          row.querySelector('[data-action="edit"]')?.addEventListener("click", () => openEdit(view, nutrientId, basis));
+        }
+      }
+
+      function evidenceSelectOptions(view) {
+        const all = Object.values(view.evidence || {}).filter((e) => e && e.type === "evidence.create");
+        all.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        const options = [`<option value="">（不关联证据）</option>`];
+        for (const e of all.slice(0, 30)) {
+          options.push(`<option value="${escapeHtml(e.id)}">${escapeHtml(e.kind || "evidence")} · ${escapeHtml(fmt(e.createdAt))} · ${escapeHtml(e.id)}</option>`);
+        }
+        return options.join("");
+      }
+
+      function wireLabelImport(view) {
+        const sel = $("#label-evidence");
+        if (sel) sel.innerHTML = evidenceSelectOptions(view);
+
+        const btnParse = $("#btn-parse");
+        const btnSave = $("#btn-save-parsed");
+        const preview = $("#parse-preview .v");
+        let parsed = null;
+
+        const doParse = () => {
+          const text = $("#label-text")?.value || "";
+          const override = String($("#import-basis")?.value || "auto");
+          const servingRaw = String($("#import-serving")?.value || "").trim();
+          const basisOverride = override === "auto" ? null : { kind: override };
+          parsed = parseLabelText(text, { basisOverride, servingRaw });
+          if (!preview) return;
+          if (!parsed.items.length) {
+            preview.textContent = "未识别到数值（你可以先手动添加/或调整 OCR 文本）";
+            btnSave.disabled = true;
+            return;
+          }
+          preview.innerHTML =
+            `<span class="mono">${escapeHtml(parsed.basisLabel)}</span> · ` +
+            parsed.items.map((i) => `${escapeHtml(i.nutrientId)}=${escapeHtml(i.value)}${escapeHtml(i.unit)}`).join(" · ");
+          btnSave.disabled = false;
+        };
+
+        btnParse?.addEventListener("click", doParse);
+        $("#label-text")?.addEventListener("keydown", (e) => {
+          if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "enter") doParse();
+        });
+
+        btnSave?.addEventListener("click", async () => {
+          if (!parsed?.items?.length) return;
+          const evidenceId = String($("#label-evidence")?.value || "").trim();
+          const datasetVersion = String($("#import-version")?.value || "").trim();
+          const sourceId = String($("#import-sourceid")?.value || "").trim();
+          const observations = parsed.items.map((i) => ({
+            foodId: view.food.id,
+            nutrientId: i.nutrientId,
+            value: i.value,
+            unit: i.unit,
+            basis: parsed.basis,
+            method: "label_verified",
+            source: "user",
+            sourceId,
+            datasetVersion,
+            evidenceId: evidenceId || "",
+            note: "import:label_text",
+          }));
+          await api.post("/api/observations/batch", { observations });
+          await selectFood(view.food.id);
+        });
+      }
+
+      function parseLabelText(text, { basisOverride, servingRaw } = {}) {
+        const raw = String(text || "");
+        const t = raw.replace(/\u3000/g, " ").replace(/[：:]/g, ":").replace(/\s+/g, " ").trim();
+        const basis = normalizeBasis(basisOverride || detectBasis(t), servingRaw || "");
+        const items = [];
+
+        const pushIf = (nutrientId, value, unit) => {
+          if (value === "" || value == null) return;
+          items.push({ nutrientId, value: String(value), unit });
+        };
+
+        const num = (s) => String(s || "").replace(",", ".").match(/[0-9]+(?:\.[0-9]+)?/)?.[0] || "";
+
+        const mEnergyKj = t.match(/能量[^0-9]*([0-9]+(?:[\\.,][0-9]+)?)\\s*(kJ|kj|千焦)(?:[^0-9%]*([0-9]+(?:[\\.,][0-9]+)?)\\s*%?)?/);
+        const mEnergyKcal = t.match(/能量[^0-9]*([0-9]+(?:[\\.,][0-9]+)?)\\s*(kcal|KCAL|千卡|大卡)(?:[^0-9%]*([0-9]+(?:[\\.,][0-9]+)?)\\s*%?)?/);
+        pushIf("energy_kj", mEnergyKj ? num(mEnergyKj[1]) : "", "kJ");
+        pushIf("energy_kcal", mEnergyKcal ? num(mEnergyKcal[1]) : "", "kcal");
+        pushIf(
+          "energy_nrv_pct",
+          mEnergyKj && mEnergyKj[3]
+            ? num(mEnergyKj[3])
+            : mEnergyKcal && mEnergyKcal[3]
+            ? num(mEnergyKcal[3])
+            : "",
+          "%"
+        );
+
+        const mProtein = t.match(/蛋白质[^0-9]*([0-9]+(?:[\\.,][0-9]+)?)\\s*g(?:[^0-9%]*([0-9]+(?:[\\.,][0-9]+)?)\\s*%?)?/i);
+        const mFat = t.match(/脂肪[^0-9]*([0-9]+(?:[\\.,][0-9]+)?)\\s*g(?:[^0-9%]*([0-9]+(?:[\\.,][0-9]+)?)\\s*%?)?/i);
+        const mCarb = t.match(/(碳水化合物|碳水)[^0-9]*([0-9]+(?:[\\.,][0-9]+)?)\\s*g(?:[^0-9%]*([0-9]+(?:[\\.,][0-9]+)?)\\s*%?)?/i);
+        const mSodium = t.match(/钠[^0-9]*([0-9]+(?:[\\.,][0-9]+)?)\\s*mg(?:[^0-9%]*([0-9]+(?:[\\.,][0-9]+)?)\\s*%?)?/i);
+
+        pushIf("protein_g", mProtein ? num(mProtein[1]) : "", "g");
+        pushIf("fat_g", mFat ? num(mFat[1]) : "", "g");
+        pushIf("carb_g", mCarb ? num(mCarb[2]) : "", "g");
+        pushIf("sodium_mg", mSodium ? num(mSodium[1]) : "", "mg");
+        pushIf("protein_nrv_pct", mProtein && mProtein[2] ? num(mProtein[2]) : "", "%");
+        pushIf("fat_nrv_pct", mFat && mFat[2] ? num(mFat[2]) : "", "%");
+        pushIf("carb_nrv_pct", mCarb && mCarb[3] ? num(mCarb[3]) : "", "%");
+        pushIf("sodium_nrv_pct", mSodium && mSodium[2] ? num(mSodium[2]) : "", "%");
+
+        const basisLabel = basisLabel(basis);
+
+        return { basis, basisLabel, items };
+      }
+
+      function detectBasis(text) {
+        const t = String(text || "");
+        if (/每\\s*100\\s*(毫升|ml|mL)/.test(t)) return { kind: "per-100ml" };
+        if (/每\\s*100\\s*(克|g|G)/.test(t)) return { kind: "per-100g" };
+        const mServing = t.match(/每\\s*份[^0-9]*\\(?\\s*([0-9]+(?:\\.[0-9]+)?)\\s*(g|克|ml|mL|毫升)\\s*\\)?/);
+        if (mServing) {
+          const q = Number.parseFloat(mServing[1]);
+          const uRaw = String(mServing[2]).toLowerCase();
+          const unit = uRaw.includes("ml") || uRaw.includes("毫升") ? "ml" : "g";
+          if (!Number.isNaN(q)) return { kind: "per-serving", servingSize: { quantity: q, unit } };
+        }
+        if (/每\\s*份/.test(t)) return { kind: "per-serving" };
+        return { kind: "per-100g" };
+      }
+
+      function parseServing(servingRaw) {
+        const s = String(servingRaw || "").trim();
+        if (!s) return null;
+        const m = s.match(/([0-9]+(?:\\.[0-9]+)?)\\s*(g|克|ml|mL|毫升)/);
+        if (!m) return null;
+        const q = Number.parseFloat(m[1]);
+        if (Number.isNaN(q)) return null;
+        const uRaw = String(m[2]).toLowerCase();
+        const unit = uRaw.includes("ml") || uRaw.includes("毫升") ? "ml" : "g";
+        return { quantity: q, unit };
+      }
+
+      function normalizeBasis(basis, servingRaw) {
+        if (!basis || !basis.kind) return { kind: "per-100g" };
+        if (basis.kind !== "per-serving") return basis;
+        if (basis?.servingSize?.quantity && basis?.servingSize?.unit) return basis;
+        const parsed = parseServing(servingRaw);
+        if (!parsed) return basis;
+        return { kind: "per-serving", servingSize: parsed };
+      }
+
+      async function openEdit(view, nutrientId, basis) {
+        const eff = findEffective(view, nutrientId, basis);
+        const obs = eff?.observation || null;
+        const nutrient = state.nutrients.find((n) => n.id === nutrientId) || { id: nutrientId, label: nutrientId, unit: "" };
+
+        const body = $("#dlg-body");
+        $("#dlg-title").textContent = "Edit / Add";
+        $("#dlg-backdrop").setAttribute("aria-hidden", "false");
+
+        const evidenceOptions = evidenceSelectOptions(view);
+        const currentEvidence = obs?.evidenceId || "";
+        body.innerHTML = `
+          <div class="kpi">
+            <div class="k">Target</div>
+            <div class="v">${escapeHtml(view.food.label)} · <span class="mono">${escapeHtml(nutrient.id)}</span></div>
+            <div class="muted" style="font-size:12px">新增会生成一条新的 observation；不会覆盖旧值。</div>
+          </div>
+          <div style="height:12px"></div>
+          <div class="field">
+            <div class="label">Value</div>
+            <input id="edit-value" inputmode="decimal" placeholder="${escapeHtml(nutrient.unit)}" value="${escapeHtml(obs?.value || "")}" />
+          </div>
+          <div style="height:10px"></div>
+          <div class="field">
+            <div class="label">Unit</div>
+            <input id="edit-unit" value="${escapeHtml(obs?.unit || nutrient.unit || "")}" />
+          </div>
+          <div style="height:10px"></div>
+          <div class="field">
+            <div class="label">Method</div>
+            <select id="edit-method">
+              ${[
+                ["manual", "manual"],
+                ["label_verified", "label_verified"],
+                ["label_ocr", "label_ocr"],
+                ["database", "database"],
+                ["derived", "derived"],
+              ]
+                .map(([v]) => `<option value="${v}" ${obs?.method === v ? "selected" : ""}>${v}</option>`)
+                .join("")}
+            </select>
+          </div>
+          <div style="height:10px"></div>
+          <div class="field">
+            <div class="label">Source</div>
+            <input id="edit-source" value="${escapeHtml(obs?.source || "user")}" placeholder="user/off/fdc/cfct/…" />
+          </div>
+          <div style="height:10px"></div>
+          <div class="grid" style="grid-template-columns:1fr 1fr;gap:10px;padding:0">
+            <div class="field">
+              <div class="label">Dataset Version</div>
+              <input id="edit-version" value="${escapeHtml(obs?.datasetVersion || "")}" placeholder="例如：2026-01-23" />
+            </div>
+            <div class="field">
+              <div class="label">Source Id</div>
+              <input id="edit-sourceid" value="${escapeHtml(obs?.sourceId || "")}" placeholder="原始主键/条码字段/…" />
+            </div>
+          </div>
+          <div style="height:10px"></div>
+          <div class="field">
+            <div class="label">Evidence</div>
+            <select id="edit-evidence">${evidenceOptions}</select>
+          </div>
+          <div style="height:10px"></div>
+          <div class="field">
+            <div class="label">Note</div>
+            <input id="edit-note" value="" placeholder="为什么改？依据是什么？" />
+          </div>
+          <div style="height:12px"></div>
+          <div class="row-actions" style="justify-content:flex-end">
+            <button class="btn ghost" type="button" id="btn-cancel">取消</button>
+            <button class="btn" type="button" id="btn-save">保存（追加记录）</button>
+          </div>
+        `;
+
+        const selEvidence = $("#edit-evidence");
+        if (selEvidence && currentEvidence) selEvidence.value = currentEvidence;
+
+        $("#btn-cancel").addEventListener("click", closeDialog);
+        $("#btn-save").addEventListener("click", async () => {
+          const value = String($("#edit-value").value || "").trim();
+          const unit = String($("#edit-unit").value || "").trim();
+          const method = String($("#edit-method").value || "manual").trim();
+          const source = String($("#edit-source").value || "user").trim();
+          const datasetVersion = String($("#edit-version").value || "").trim();
+          const sourceId = String($("#edit-sourceid").value || "").trim();
+          const evidenceId = String($("#edit-evidence").value || "").trim();
+          const note = String($("#edit-note").value || "").trim();
+          if (!value || !unit) return alert("Value / Unit 必填");
+
+          await api.post("/api/observations", {
+            foodId: view.food.id,
+            nutrientId,
+            value,
+            unit,
+            basis,
+            method,
+            source,
+            sourceId,
+            datasetVersion,
+            evidenceId,
+            parentId: obs?.id || "",
+            note,
+          });
+          closeDialog();
+          await selectFood(view.food.id);
+        });
+      }
+
+      async function openHistory(view, nutrientId, basis) {
+        const nutrient = state.nutrients.find((n) => n.id === nutrientId) || { id: nutrientId, label: nutrientId, unit: "" };
+        const list = groupObservations(view, nutrientId, basis);
+        $("#dlg-title").textContent = "History";
+        $("#dlg-backdrop").setAttribute("aria-hidden", "false");
+
+        const body = $("#dlg-body");
+        if (!list.length) {
+          body.innerHTML = `<div class="kpi"><div class="k">Empty</div><div class="v">暂无历史</div></div>`;
+          return;
+        }
+
+        const selectedKey = makeSelectionKey(view.food.id, nutrientId, basis);
+        const selectedId = view.selections?.[selectedKey]?.selectedObservationId || "";
+
+        const html = [];
+        html.push(`<div class="kpi"><div class="k">Target</div><div class="v">${escapeHtml(view.food.label)} · <span class="mono">${escapeHtml(nutrient.id)}</span></div></div>`);
+        html.push(`<div style="height:12px"></div>`);
+
+        const earliest = list[list.length - 1];
+        const canRollback = earliest && earliest.id && earliest.id !== selectedId;
+
+        html.push(`<div class="row-actions" style="justify-content:flex-end;margin-bottom:10px">
+          <button class="btn ghost tiny" type="button" id="btn-rollback" ${canRollback ? "" : "disabled"}>回滚到最初</button>
+        </div>`);
+
+        for (const o of list) {
+          const e = o.evidenceId ? state.evidenceCache[o.evidenceId] : null;
+          const thumb = e?.thumb?.path ? `<img class="thumb" data-lightbox="${escapeHtml(e.preview?.path || e.thumb?.path)}" src="${escapeHtml(e.thumb?.path)}" alt="evidence" />` : "";
+          const current = o.id === selectedId;
+          html.push(`
+            <div class="history-item">
+              <div class="history-top">
+                <div>
+                  <div class="history-val mono">${escapeHtml(o.value)} ${escapeHtml(o.unit)} ${current ? '<span class="pill strong" style="margin-left:8px">current</span>' : ""}</div>
+                  <div class="history-meta">${escapeHtml(o.source || "?")} · ${escapeHtml(o.method || "?")} · ${escapeHtml(fmt(o.createdAt))}</div>
+                </div>
+                <div class="row-actions">
+                  <button class="btn tiny" type="button" data-use="${escapeHtml(o.id)}" ${current ? "disabled" : ""}>使用此值</button>
+                </div>
+              </div>
+              <div style="display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap">
+                ${thumb}
+                <div class="muted" style="font-size:12px;min-width:240px;flex:1">
+                  ${o.note ? `note: ${escapeHtml(o.note)}` : "—"}
+                  ${o.parentId ? `<div class="mono" style="margin-top:6px">parent: ${escapeHtml(o.parentId)}</div>` : ""}
+                </div>
+              </div>
+            </div>
+          `);
+        }
+
+        body.innerHTML = html.join("");
+
+        $("#btn-rollback")?.addEventListener("click", async () => {
+          if (!earliest?.id) return;
+          await api.post("/api/selections", {
+            foodId: view.food.id,
+            nutrientId,
+            basis,
+            toObservationId: earliest.id,
+            mode: "pinned",
+            reason: "rollback",
+            fromObservationId: selectedId || "",
+          });
+          closeDialog();
+          await selectFood(view.food.id);
+        });
+
+        $$("button[data-use]").forEach((btn) => {
+          btn.addEventListener("click", async () => {
+            const to = btn.getAttribute("data-use");
+            await api.post("/api/selections", {
+              foodId: view.food.id,
+              nutrientId,
+              basis,
+              toObservationId: to,
+              mode: "pinned",
+              reason: "choose_source",
+              fromObservationId: selectedId || "",
+            });
+            closeDialog();
+            await selectFood(view.food.id);
+          });
+        });
+
+        $$("[data-lightbox]").forEach((img) => img.addEventListener("click", () => openLightbox(img.getAttribute("data-lightbox"), `${view.food.label} · ${nutrientId}`)));
+      }
+
+      function closeDialog() {
+        $("#dlg-backdrop").setAttribute("aria-hidden", "true");
+        $("#dlg-body").innerHTML = "";
+      }
+
+      function renderEvidencePanel(view) {
+        return `
+          <div class="subsection">
+            <div class="subhead">
+              <h2>证据图片（压缩存储，可选上传 R2）</h2>
+              <div class="row-actions">
+                <label class="pill" style="display:inline-flex;gap:8px;align-items:center">
+                  <input id="ev-upload" type="checkbox" ${state.r2?.available ? "" : "disabled"} />
+                  上传到 R2
+                </label>
+              </div>
+            </div>
+            <div class="hint">
+              建议只保留“营养成分表区域”的压缩图（preview + thumb）。R2 关闭时也可正常使用本地路径。
+            </div>
+            <div class="field">
+              <div class="label">Image</div>
+              <input id="ev-file" type="file" accept="image/*" capture="environment" />
+            </div>
+            <div style="height:10px"></div>
+            <div class="field">
+              <div class="label">OCR Text (optional)</div>
+              <textarea id="ev-ocr" placeholder="把系统 OCR 结果粘贴到这里（可留空）"></textarea>
+            </div>
+            <div style="height:10px"></div>
+            <div class="field">
+              <div class="label">Note</div>
+              <input id="ev-note" placeholder="例如：标签来自2026-01-23拍照" />
+            </div>
+            <div style="height:12px"></div>
+            <div class="row-actions" style="justify-content:flex-end">
+              <button class="btn" id="ev-save" type="button" disabled>保存证据</button>
+            </div>
+            <div style="height:12px"></div>
+            <div class="kpi" id="ev-preview">
+              <div class="k">Preview</div>
+              <div class="v muted">选择图片后会在此显示压缩预览</div>
+            </div>
+          </div>
+        `;
+      }
+
+      function wireEvidenceCreate(view) {
+        const fileInput = $("#ev-file");
+        const btnSave = $("#ev-save");
+        const previewBox = $("#ev-preview .v");
+        const chkUpload = $("#ev-upload");
+
+        let prepared = null;
+
+        fileInput?.addEventListener("change", async () => {
+          const file = fileInput.files?.[0];
+          prepared = null;
+          btnSave.disabled = true;
+          if (!file) return;
+
+          try {
+            prepared = await prepareImage(file);
+            btnSave.disabled = false;
+            previewBox.innerHTML = `
+              <div class="muted" style="font-size:12px;margin-bottom:8px">preview: ${Math.round(prepared.preview.bytes / 1024)}KB · thumb: ${Math.round(prepared.thumb.bytes / 1024)}KB</div>
+              <img class="thumb" style="width:140px;height:140px" src="${prepared.thumb.dataUrl}" alt="thumb" data-lightbox="${prepared.preview.dataUrl}" />
+            `;
+            previewBox.querySelector("[data-lightbox]")?.addEventListener("click", () => openLightbox(prepared.preview.dataUrl, "local preview"));
+          } catch (e) {
+            alert(String(e?.message || e));
+          }
+        });
+
+        btnSave?.addEventListener("click", async () => {
+          if (!prepared) return;
+          btnSave.disabled = true;
+          const uploadToR2 = Boolean(chkUpload?.checked);
+          const ocrText = String($("#ev-ocr")?.value || "");
+          const note = String($("#ev-note")?.value || "");
+          const res = await api.post("/api/evidence", {
+            kind: "nutrition_label",
+            preview: { mime: prepared.preview.mime, dataBase64: prepared.preview.dataUrl, width: prepared.preview.width, height: prepared.preview.height },
+            thumb: { mime: prepared.thumb.mime, dataBase64: prepared.thumb.dataUrl, width: prepared.thumb.width, height: prepared.thumb.height },
+            ocrText,
+            note,
+            uploadToR2,
+          });
+
+          const ev = res?.evidence;
+          const uploadError = res?.uploadError || "";
+          const url = ev?.r2?.url;
+          previewBox.innerHTML = `
+            <div class="muted" style="font-size:12px">saved: <span class="mono">${escapeHtml(ev?.id || "")}</span></div>
+            <div style="margin-top:6px">${url ? `R2: <a href="${escapeHtml(url)}" target="_blank" rel="noreferrer">${escapeHtml(url)}</a>` : uploadToR2 ? `<span class="muted">R2: 未生成 public url（或上传失败）</span>` : `<span class="muted">R2: off</span>`}</div>
+            ${uploadError ? `<div class="muted" style="font-size:12px;margin-top:6px">uploadError: ${escapeHtml(uploadError)}</div>` : ""}
+            <div style="height:10px"></div>
+            <img class="thumb" style="width:140px;height:140px" src="${escapeHtml(ev?.thumb?.path || "")}" alt="thumb" data-lightbox="${escapeHtml(ev?.preview?.path || "")}" />
+          `;
+          previewBox.querySelector("[data-lightbox]")?.addEventListener("click", () => openLightbox(ev?.preview?.path || ev?.thumb?.path, "evidence"));
+          await selectFood(view.food.id);
+          btnSave.disabled = false;
+        });
+      }
+
+      async function prepareImage(file) {
+        const img = await loadImage(file);
+        const preview = await encodeScaled(img, 1024, 0.72);
+        const thumb = await encodeScaled(img, 256, 0.78);
+        return { preview, thumb };
+      }
+
+      function loadImage(file) {
+        return new Promise((resolve, reject) => {
+          const url = URL.createObjectURL(file);
+          const img = new Image();
+          img.onload = () => {
+            URL.revokeObjectURL(url);
+            resolve(img);
+          };
+          img.onerror = (e) => {
+            URL.revokeObjectURL(url);
+            reject(new Error("Failed to load image"));
+          };
+          img.src = url;
+        });
+      }
+
+      async function encodeScaled(img, maxEdge, quality) {
+        const w = img.naturalWidth || img.width;
+        const h = img.naturalHeight || img.height;
+        const scale = Math.min(1, maxEdge / Math.max(w, h));
+        const cw = Math.max(1, Math.round(w * scale));
+        const ch = Math.max(1, Math.round(h * scale));
+        const canvas = document.createElement("canvas");
+        canvas.width = cw;
+        canvas.height = ch;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0, cw, ch);
+
+        const supportsWebp = (() => {
+          try {
+            return canvas.toDataURL("image/webp").startsWith("data:image/webp");
+          } catch {
+            return false;
+          }
+        })();
+        const mime = supportsWebp ? "image/webp" : "image/jpeg";
+
+        const blob = await new Promise((resolve) => canvas.toBlob(resolve, mime, quality));
+        const dataUrl = await new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(String(reader.result || ""));
+          reader.readAsDataURL(blob);
+        });
+        return { mime, dataUrl, bytes: blob.size, width: cw, height: ch };
+      }
+
+      function openLightbox(src, title) {
+        const lb = $("#lb");
+        const inner = $("#lb-inner");
+        const canvas = $("#lb-canvas");
+        const meta = $("#lb-meta");
+        if (!lb || !inner || !canvas) return;
+        inner.innerHTML = "";
+        const img = new Image();
+        img.alt = title || "image";
+        img.onload = () => resetLightbox(img);
+        img.src = src;
+        inner.appendChild(img);
+        meta.textContent = `${title || ""} · ESC 关闭 · 滚轮缩放 · 拖拽移动 · 双击重置`;
+        lb.setAttribute("aria-hidden", "false");
+      }
+
+      function closeLightbox() {
+        $("#lb")?.setAttribute("aria-hidden", "true");
+        $("#lb-inner").innerHTML = "";
+      }
+
+      function resetLightbox(img) {
+        const canvas = $("#lb-canvas");
+        const inner = $("#lb-inner");
+        if (!canvas || !inner) return;
+        const rect = canvas.getBoundingClientRect();
+        const iw = img.naturalWidth || img.width;
+        const ih = img.naturalHeight || img.height;
+        const s = Math.min(rect.width / iw, rect.height / ih);
+        inner.dataset.scale = String(s);
+        inner.dataset.x = String((rect.width - iw * s) / 2);
+        inner.dataset.y = String((rect.height - ih * s) / 2);
+        applyTransform(inner);
+      }
+
+      function applyTransform(inner) {
+        const s = Number.parseFloat(inner.dataset.scale || "1");
+        const x = Number.parseFloat(inner.dataset.x || "0");
+        const y = Number.parseFloat(inner.dataset.y || "0");
+        inner.style.transform = `translate(${x}px, ${y}px) scale(${s})`;
+      }
+
+      (() => {
+        const lb = $("#lb");
+        const canvas = $("#lb-canvas");
+        const inner = $("#lb-inner");
+        const closeBtn = $("#lb-close");
+        const dlgClose = $("#dlg-close");
+
+        dlgClose?.addEventListener("click", closeDialog);
+        $("#dlg-backdrop")?.addEventListener("click", (e) => {
+          if (e.target?.id === "dlg-backdrop") closeDialog();
+        });
+
+        closeBtn?.addEventListener("click", closeLightbox);
+        lb?.addEventListener("click", (e) => {
+          if (e.target?.id === "lb") closeLightbox();
+        });
+        window.addEventListener("keydown", (e) => {
+          if (e.key === "Escape") {
+            closeDialog();
+            closeLightbox();
+          }
+        });
+
+        let dragging = false;
+        let startX = 0;
+        let startY = 0;
+        let baseX = 0;
+        let baseY = 0;
+
+        canvas?.addEventListener("dblclick", () => {
+          const img = inner?.querySelector("img");
+          if (img) resetLightbox(img);
+        });
+
+        canvas?.addEventListener("mousedown", (e) => {
+          if (!inner) return;
+          dragging = true;
+          startX = e.clientX;
+          startY = e.clientY;
+          baseX = Number.parseFloat(inner.dataset.x || "0");
+          baseY = Number.parseFloat(inner.dataset.y || "0");
+        });
+        window.addEventListener("mousemove", (e) => {
+          if (!dragging || !inner) return;
+          inner.dataset.x = String(baseX + (e.clientX - startX));
+          inner.dataset.y = String(baseY + (e.clientY - startY));
+          applyTransform(inner);
+        });
+        window.addEventListener("mouseup", () => (dragging = false));
+
+        canvas?.addEventListener(
+          "wheel",
+          (e) => {
+            if (!inner) return;
+            e.preventDefault();
+            const scale = Number.parseFloat(inner.dataset.scale || "1");
+            const next = Math.min(8, Math.max(0.08, scale * (e.deltaY > 0 ? 0.92 : 1.08)));
+            inner.dataset.scale = String(next);
+            applyTransform(inner);
+          },
+          { passive: false }
+        );
+      })();
+
+      async function boot() {
+        if (location.protocol === "file:") {
+          alert("此页面需要本地 server：请运行 `node html/nutrition-ledger-mvp/server.mjs`，然后打开 http://127.0.0.1:8789");
+          return;
+        }
+        const bs = await api.get("/api/bootstrap");
+        state.bootstrap = bs;
+        state.foods = bs.foods || [];
+        state.nutrients = bs.nutrients || [];
+        setPillR2(bs.r2 || {});
+        renderFoods();
+
+        $("#food-search")?.addEventListener("input", renderFoods);
+
+        $("#btn-new-food")?.addEventListener("click", openNewFood);
+        $("#btn-export")?.addEventListener("click", async () => {
+          const dump = await api.get("/api/export");
+          const stamp = new Date().toISOString().slice(0, 19).replaceAll(":", "");
+          downloadJson(`nutrition-ledger-export-${stamp}.json`, dump);
+        });
+      }
+
+      function openNewFood() {
+        $("#dlg-title").textContent = "New Food";
+        $("#dlg-backdrop").setAttribute("aria-hidden", "false");
+        $("#dlg-body").innerHTML = `
+          <div class="field">
+            <div class="label">Label</div>
+            <input id="nf-label" placeholder="例如：蒙牛纯牛奶" />
+          </div>
+          <div style="height:10px"></div>
+          <div class="field">
+            <div class="label">Barcode (optional)</div>
+            <input id="nf-barcode" inputmode="numeric" placeholder="690..." />
+          </div>
+          <div style="height:10px"></div>
+          <div class="field">
+            <div class="label">Brand (optional)</div>
+            <input id="nf-brand" placeholder="例如：蒙牛" />
+          </div>
+          <div style="height:12px"></div>
+          <div class="row-actions" style="justify-content:flex-end">
+            <button class="btn ghost" type="button" id="nf-cancel">取消</button>
+            <button class="btn" type="button" id="nf-save">创建</button>
+          </div>
+        `;
+
+        $("#nf-cancel").addEventListener("click", closeDialog);
+        $("#nf-save").addEventListener("click", async () => {
+          const label = String($("#nf-label").value || "").trim();
+          const barcode = String($("#nf-barcode").value || "").trim();
+          const brand = String($("#nf-brand").value || "").trim();
+          if (!label) return alert("Label 必填");
+          const res = await api.post("/api/foods", { label, barcode, brand, kind: "packaged" });
+          closeDialog();
+          state.foods = [res.food, ...state.foods.filter((f) => f.id !== res.food.id)];
+          renderFoods();
+          await selectFood(res.food.id);
+        });
+      }
+
+      boot().catch((e) => alert(String(e?.message || e)));
+    </script>
+  </body>
+</html>
