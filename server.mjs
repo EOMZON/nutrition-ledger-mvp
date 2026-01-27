@@ -9,7 +9,7 @@ import childProcess from "node:child_process";
 const APP_DIR = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(APP_DIR, "../..");
 
-const DATA_DIR = path.join(APP_DIR, "data");
+const DATA_DIR = path.resolve(process.env.NUTRITION_LEDGER_DATA_DIR || path.join(APP_DIR, "data"));
 const LEDGER_DIR = path.join(DATA_DIR, "ledger");
 const STATE_DIR = path.join(DATA_DIR, "state");
 const BLOBS_DIR = path.join(DATA_DIR, "blobs");

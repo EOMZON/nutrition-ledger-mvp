@@ -1109,10 +1109,18 @@
           items.push({ nutrientId, value: String(value), unit });
         };
 
-        const num = (s) => String(s || "").replace(",", ".").match(/[0-9]+(?:\.[0-9]+)?/)?.[0] || "";
+        const num =
+          (s) =>
+            String(s || "")
+              .replace(",", ".")
+              .match(/[0-9]+(?:\.[0-9]+)?/)?.[0] || "";
 
-        const mEnergyKj = t.match(/能量[^0-9]*([0-9]+(?:[\\.,][0-9]+)?)\\s*(kJ|kj|千焦)(?:[^0-9%]*([0-9]+(?:[\\.,][0-9]+)?)\\s*%?)?/);
-        const mEnergyKcal = t.match(/能量[^0-9]*([0-9]+(?:[\\.,][0-9]+)?)\\s*(kcal|KCAL|千卡|大卡)(?:[^0-9%]*([0-9]+(?:[\\.,][0-9]+)?)\\s*%?)?/);
+        const mEnergyKj = t.match(
+          /能量[^0-9]*([0-9]+(?:[.,][0-9]+)?)\s*(kJ|kj|千焦)(?:[^0-9%]*([0-9]+(?:[.,][0-9]+)?)\s*%?)?/,
+        );
+        const mEnergyKcal = t.match(
+          /能量[^0-9]*([0-9]+(?:[.,][0-9]+)?)\s*(kcal|KCAL|千卡|大卡)(?:[^0-9%]*([0-9]+(?:[.,][0-9]+)?)\s*%?)?/,
+        );
         pushIf("energy_kj", mEnergyKj ? num(mEnergyKj[1]) : "", "kJ");
         pushIf("energy_kcal", mEnergyKcal ? num(mEnergyKcal[1]) : "", "kcal");
         pushIf(
@@ -1125,10 +1133,18 @@
           "%"
         );
 
-        const mProtein = t.match(/蛋白质[^0-9]*([0-9]+(?:[\\.,][0-9]+)?)\\s*g(?:[^0-9%]*([0-9]+(?:[\\.,][0-9]+)?)\\s*%?)?/i);
-        const mFat = t.match(/脂肪[^0-9]*([0-9]+(?:[\\.,][0-9]+)?)\\s*g(?:[^0-9%]*([0-9]+(?:[\\.,][0-9]+)?)\\s*%?)?/i);
-        const mCarb = t.match(/(碳水化合物|碳水)[^0-9]*([0-9]+(?:[\\.,][0-9]+)?)\\s*g(?:[^0-9%]*([0-9]+(?:[\\.,][0-9]+)?)\\s*%?)?/i);
-        const mSodium = t.match(/钠[^0-9]*([0-9]+(?:[\\.,][0-9]+)?)\\s*mg(?:[^0-9%]*([0-9]+(?:[\\.,][0-9]+)?)\\s*%?)?/i);
+        const mProtein = t.match(
+          /蛋白质[^0-9]*([0-9]+(?:[.,][0-9]+)?)\s*g(?:[^0-9%]*([0-9]+(?:[.,][0-9]+)?)\s*%?)?/i,
+        );
+        const mFat = t.match(
+          /脂肪[^0-9]*([0-9]+(?:[.,][0-9]+)?)\s*g(?:[^0-9%]*([0-9]+(?:[.,][0-9]+)?)\s*%?)?/i,
+        );
+        const mCarb = t.match(
+          /(碳水化合物|碳水)[^0-9]*([0-9]+(?:[.,][0-9]+)?)\s*g(?:[^0-9%]*([0-9]+(?:[.,][0-9]+)?)\s*%?)?/i,
+        );
+        const mSodium = t.match(
+          /钠[^0-9]*([0-9]+(?:[.,][0-9]+)?)\s*mg(?:[^0-9%]*([0-9]+(?:[.,][0-9]+)?)\s*%?)?/i,
+        );
 
         pushIf("protein_g", mProtein ? num(mProtein[1]) : "", "g");
         pushIf("fat_g", mFat ? num(mFat[1]) : "", "g");
@@ -1139,30 +1155,32 @@
         pushIf("carb_nrv_pct", mCarb && mCarb[3] ? num(mCarb[3]) : "", "%");
         pushIf("sodium_nrv_pct", mSodium && mSodium[2] ? num(mSodium[2]) : "", "%");
 
-        const basisLabel = basisLabel(basis);
+        const basisLabelText = basisLabel(basis);
 
-        return { basis, basisLabel, items };
+        return { basis, basisLabel: basisLabelText, items };
       }
 
       function detectBasis(text) {
         const t = String(text || "");
-        if (/每\\s*100\\s*(毫升|ml|mL)/.test(t)) return { kind: "per-100ml" };
-        if (/每\\s*100\\s*(克|g|G)/.test(t)) return { kind: "per-100g" };
-        const mServing = t.match(/每\\s*份[^0-9]*\\(?\\s*([0-9]+(?:\\.[0-9]+)?)\\s*(g|克|ml|mL|毫升)\\s*\\)?/);
+        if (/每\s*100\s*(毫升|ml|mL)/.test(t)) return { kind: "per-100ml" };
+        if (/每\s*100\s*(克|g|G)/.test(t)) return { kind: "per-100g" };
+        const mServing = t.match(
+          /每\s*份[^0-9]*\(?\s*([0-9]+(?:\.[0-9]+)?)\s*(g|克|ml|mL|毫升)\s*\)?/,
+        );
         if (mServing) {
           const q = Number.parseFloat(mServing[1]);
           const uRaw = String(mServing[2]).toLowerCase();
           const unit = uRaw.includes("ml") || uRaw.includes("毫升") ? "ml" : "g";
           if (!Number.isNaN(q)) return { kind: "per-serving", servingSize: { quantity: q, unit } };
         }
-        if (/每\\s*份/.test(t)) return { kind: "per-serving" };
+        if (/每\s*份/.test(t)) return { kind: "per-serving" };
         return { kind: "per-100g" };
       }
 
       function parseServing(servingRaw) {
         const s = String(servingRaw || "").trim();
         if (!s) return null;
-        const m = s.match(/([0-9]+(?:\\.[0-9]+)?)\\s*(g|克|ml|mL|毫升)/);
+        const m = s.match(/([0-9]+(?:\.[0-9]+)?)\s*(g|克|ml|mL|毫升)/);
         if (!m) return null;
         const q = Number.parseFloat(m[1]);
         if (Number.isNaN(q)) return null;
