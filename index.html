@@ -115,6 +115,41 @@
         justify-content: flex-end;
       }
 
+      .nav {
+        display: inline-flex;
+        gap: 8px;
+        align-items: center;
+        flex-wrap: wrap;
+        justify-content: center;
+        flex: 1 1 auto;
+        min-width: 240px;
+      }
+
+      .tab {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 8px 12px;
+        border-radius: 999px;
+        font-size: 12px;
+        letter-spacing: 1px;
+        border: 1px solid var(--gray-200);
+        color: var(--gray-600);
+        cursor: pointer;
+        user-select: none;
+      }
+
+      .tab:hover {
+        border-color: var(--black);
+        color: var(--black);
+      }
+
+      .tab[aria-current="page"] {
+        border-color: var(--black);
+        color: var(--black);
+        background: rgba(10, 10, 10, 0.03);
+      }
+
       .btn {
         appearance: none;
         border: 1px solid var(--black);
@@ -578,7 +613,13 @@
           <span>ZON</span>
           <span class="tag">Nutrition Ledger · MVP</span>
         </div>
+        <nav class="nav" aria-label="Primary">
+          <a class="tab" href="#today" data-route="today" aria-current="page">Today</a>
+          <a class="tab" href="#capture" data-route="capture">Capture</a>
+          <a class="tab" href="#foods" data-route="foods">Foods</a>
+        </nav>
         <div class="actions">
+          <span class="pill" id="pill-r2">R2: checking</span>
           <button class="btn ghost" id="btn-export" type="button">导出 JSON</button>
           <button class="btn" id="btn-new-food" type="button">新建食物</button>
         </div>
@@ -586,60 +627,7 @@
     </header>
 
     <main class="container">
-      <div class="hero">
-        <div class="hero-label">LOCAL‑FIRST · TRACEABLE NUTRITION VALUES</div>
-        <h1><strong>每条数值</strong>可溯源、可回滚、可选来源</h1>
-        <p class="hero-sub">
-          账本是 JSONL 追加写：你“修改”不会覆盖旧值，而是新增一条观测记录，并把当前选择指针切过去（随时切回）。
-        </p>
-      </div>
-
-      <hr />
-
-      <div class="grid">
-        <section class="panel" aria-label="Foods">
-          <div class="panel-head">
-            <div class="panel-title">Foods</div>
-            <div class="pillrow">
-              <span class="pill" id="pill-r2">R2: checking</span>
-            </div>
-          </div>
-          <div class="panel-body">
-            <div class="field">
-              <div class="label">Search</div>
-              <input id="food-search" type="search" placeholder="按名称/条码过滤…" autocomplete="off" />
-            </div>
-            <div style="height: 12px"></div>
-            <div class="list" id="foods"></div>
-            <div style="height: 12px"></div>
-            <div class="kpi">
-              <div class="k">Data</div>
-              <div class="v mono" id="kpi-data">—</div>
-              <div class="muted" style="font-size: 12px">
-                数据落盘在 <span class="mono">html/nutrition-ledger-mvp/data/</span>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section class="panel" aria-label="Details">
-          <div class="panel-head">
-            <div class="panel-title">Detail</div>
-            <div class="pillrow" id="food-pills"></div>
-          </div>
-          <div class="panel-body">
-            <div class="split" id="detail">
-              <div class="kpi">
-                <div class="k">Start</div>
-                <div class="v">选择一个食物，或新建</div>
-                <div class="muted" style="font-size: 12px">
-                  推荐流程：上传营养成分表图片（可选）→ 粘贴 OCR 文本 → 解析 → 校对后写入多条营养数值。
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-      </div>
+      <div id="page"></div>
     </main>
 
     <div class="dialog-backdrop" id="dlg-backdrop" aria-hidden="true">
@@ -674,6 +662,10 @@
         bootstrap: null,
         foods: [],
         nutrients: [],
+        route: "today",
+        todayDate: "",
+        todayView: null,
+        capture: { foodId: "", evidenceId: "" },
         selectedFoodId: "",
         selectedFoodView: null,
         basis: { kind: "per-100g" },
@@ -711,6 +703,32 @@
         )}`;
       }
 
+      function fmtTime(dt) {
+        const d = new Date(dt);
+        if (Number.isNaN(d.getTime())) return String(dt || "");
+        return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+      }
+
+      function localDateNow() {
+        const d = new Date();
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      }
+
+      function localTimeNow() {
+        const d = new Date();
+        return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+      }
+
+      function isoFromLocal(dateStr, timeStr) {
+        const date = String(dateStr || "").trim();
+        const time = String(timeStr || "").trim();
+        if (!date) return new Date().toISOString();
+        const full = time ? `${date}T${time}:00` : `${date}T00:00:00`;
+        const d = new Date(full);
+        if (Number.isNaN(d.getTime())) return new Date().toISOString();
+        return d.toISOString();
+      }
+
       function downloadJson(filename, obj) {
         const blob = new Blob([JSON.stringify(obj, null, 2)], { type: "application/json" });
         const url = URL.createObjectURL(blob);
@@ -734,6 +752,254 @@
           el.textContent = "R2: off";
           el.classList.remove("strong");
         }
+      }
+
+      function routeFromHash() {
+        const raw = String(location.hash || "").replace(/^#/, "");
+        if (raw === "capture") return "capture";
+        if (raw === "foods") return "foods";
+        return "today";
+      }
+
+      function setActiveRoute(route) {
+        state.route = route;
+        $$("[data-route]").forEach((el) => {
+          const r = el.getAttribute("data-route");
+          if (r === route) el.setAttribute("aria-current", "page");
+          else el.removeAttribute("aria-current");
+        });
+      }
+
+      function renderPage(route) {
+        const page = $("#page");
+        if (!page) return;
+
+        if (route === "foods") {
+          page.innerHTML = `
+            <div class="hero" style="padding:34px 0 18px">
+              <div class="hero-label">LIBRARY · DEFAULT VALUES</div>
+              <h1><strong>默认营养值</strong>（可溯源 / 可切换 / 可回滚）</h1>
+              <p class="hero-sub">这里管理“食物的默认数值来源”。当天摄入请去 Today。</p>
+            </div>
+            <hr />
+            <div class="grid">
+              <section class="panel" aria-label="Foods">
+                <div class="panel-head"><div class="panel-title">Foods</div></div>
+                <div class="panel-body">
+                  <div class="field">
+                    <div class="label">Search</div>
+                    <input id="food-search" type="search" placeholder="按名称/条码过滤…" autocomplete="off" />
+                  </div>
+                  <div style="height: 12px"></div>
+                  <div class="list" id="foods"></div>
+                  <div style="height: 12px"></div>
+                  <div class="kpi">
+                    <div class="k">Data</div>
+                    <div class="v mono" id="kpi-data">—</div>
+                    <div class="muted" style="font-size: 12px">数据落盘在 <span class="mono">html/nutrition-ledger-mvp/data/</span></div>
+                  </div>
+                </div>
+              </section>
+              <section class="panel" aria-label="Details">
+                <div class="panel-head">
+                  <div class="panel-title">Detail</div>
+                  <div class="pillrow" id="food-pills"></div>
+                </div>
+                <div class="panel-body">
+                  <div class="split" id="detail">
+                    <div class="kpi">
+                      <div class="k">Start</div>
+                      <div class="v">选择一个食物，或新建</div>
+                      <div class="muted" style="font-size: 12px">推荐：去 Capture 上传图片/粘贴 OCR → 校对 → 一次性写入多条数值。</div>
+                    </div>
+                  </div>
+                </div>
+              </section>
+            </div>
+          `;
+          return;
+        }
+
+        if (route === "capture") {
+          page.innerHTML = `
+            <div class="hero" style="padding:34px 0 18px">
+              <div class="hero-label">CAPTURE · REVIEW · COMMIT</div>
+              <h1><strong>录入 → 识别 → 校对 → 写账</strong></h1>
+              <p class="hero-sub">先把证据/文字变成“可追溯的 observation”，再决定是否加入 Today。</p>
+            </div>
+            <hr />
+            <section class="panel" aria-label="Capture Wizard">
+              <div class="panel-head">
+                <div class="panel-title">Capture Wizard</div>
+                <div class="pillrow"><span class="pill mono">append-only</span></div>
+              </div>
+              <div class="panel-body">
+                <div class="subsection">
+                  <div class="subhead">
+                    <h2>1) 选择食物</h2>
+                    <div class="row-actions"><button class="btn tiny" type="button" id="cap-new-food">新建食物</button></div>
+                  </div>
+                  <div class="field"><div class="label">Food</div><select id="cap-food"></select></div>
+                </div>
+                <div class="subsection">
+                  <div class="subhead">
+                    <h2>2) 证据图片（可选）</h2>
+                    <div class="row-actions">
+                      <label class="pill" style="display:inline-flex;gap:8px;align-items:center">
+                        <input id="cap-ev-upload" type="checkbox" ${state.r2?.available ? "" : "disabled"} />
+                        上传到 R2
+                      </label>
+                    </div>
+                  </div>
+                  <div class="hint">只存 preview + thumb（压缩）。原图太大就不要存。</div>
+                  <div class="field"><div class="label">Image</div><input id="cap-ev-file" type="file" accept="image/*" capture="environment" /></div>
+                  <div style="height:10px"></div>
+                  <div class="field"><div class="label">OCR Text (optional)</div><textarea id="cap-ev-ocr" placeholder="把系统 OCR 结果粘贴到这里（可留空）"></textarea></div>
+                  <div style="height:10px"></div>
+                  <div class="field"><div class="label">Note (optional)</div><input id="cap-ev-note" placeholder="例如：营养成分表（背标）" /></div>
+                  <div style="height:12px"></div>
+                  <div class="row-actions" style="justify-content:flex-end">
+                    <button class="btn ghost" type="button" id="cap-ev-clear">清除</button>
+                    <button class="btn" type="button" id="cap-ev-save">保存证据</button>
+                  </div>
+                  <div style="height:12px"></div>
+                  <div class="kpi" id="cap-ev-preview">
+                    <div class="k">Evidence</div>
+                    <div class="v">未保存</div>
+                    <div class="muted" style="font-size:12px">保存后可关联到 observation / Today 明细。</div>
+                  </div>
+                </div>
+                <div class="subsection">
+                  <div class="subhead">
+                    <h2>3) 粘贴文字 → 解析 → 校对</h2>
+                    <div class="row-actions">
+                      <button class="btn ghost tiny" type="button" id="cap-parse">解析</button>
+                      <button class="btn tiny" type="button" id="cap-commit" disabled>写入观测</button>
+                    </div>
+                  </div>
+                  <div class="grid" style="grid-template-columns:1fr 1fr;gap:10px;padding:0">
+                    <div class="field">
+                      <div class="label">Basis Override</div>
+                      <select id="cap-basis">
+                        <option value="auto">auto（从文本识别）</option>
+                        <option value="per-100g">每 100g</option>
+                        <option value="per-100ml">每 100ml</option>
+                        <option value="per-serving">每份</option>
+                      </select>
+                    </div>
+                    <div class="field"><div class="label">Serving Size (optional)</div><input id="cap-serving" placeholder="例如：250ml 或 30g" /></div>
+                  </div>
+                  <div style="height:10px"></div>
+                  <div class="grid" style="grid-template-columns:1fr 1fr;gap:10px;padding:0">
+                    <div class="field">
+                      <div class="label">Method</div>
+                      <select id="cap-method">
+                        <option value="label_ocr">label_ocr（来自 OCR）</option>
+                        <option value="label_verified">label_verified（已校对）</option>
+                      </select>
+                    </div>
+                    <div class="field"><div class="label">Evidence Link</div><select id="cap-evidence"></select></div>
+                  </div>
+                  <div style="height:10px"></div>
+                  <div class="grid" style="grid-template-columns:1fr 1fr;gap:10px;padding:0">
+                    <div class="field"><div class="label">Dataset Version (optional)</div><input id="cap-version" placeholder="例如：2026-01-23" /></div>
+                    <div class="field"><div class="label">Source Id (optional)</div><input id="cap-sourceid" placeholder="条码字段/原始主键/…" /></div>
+                  </div>
+                  <div style="height:10px"></div>
+                  <div class="field"><div class="label">Label Text</div><textarea id="cap-text" placeholder="示例：每100g 能量 1500kJ 18% 蛋白质 3.2g 5% 脂肪 5.6g 9% 碳水化合物 10.2g 3% 钠 120mg 6%"></textarea></div>
+                  <div style="height:12px"></div>
+                  <div class="kpi" id="cap-parse-kpi"><div class="k">Parse</div><div class="v muted" id="cap-parse-v">—</div><div class="muted" style="font-size:12px">Ctrl/Cmd + Enter 快捷解析</div></div>
+                  <div style="height:12px"></div>
+                  <div id="cap-review"></div>
+                </div>
+                <div class="subsection">
+                  <div class="subhead"><h2>4) 可选：加入 Today（冻结快照）</h2><div class="hint">默认值变化不会“改历史”。</div></div>
+                  <div class="grid" style="grid-template-columns:1fr 1fr 1fr;gap:10px;padding:0">
+                    <div class="field"><div class="label">Date</div><input id="cap-today-date" type="date" /></div>
+                    <div class="field"><div class="label">Time</div><input id="cap-today-time" type="time" /></div>
+                    <div class="field">
+                      <div class="label">Amount</div>
+                      <div class="mono" style="display:flex;gap:8px;align-items:center">
+                        <input id="cap-amt" inputmode="decimal" placeholder="100" />
+                        <span class="pill mono" id="cap-amt-unit">g</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div style="height:10px"></div>
+                  <label class="pill" style="display:inline-flex;gap:8px;align-items:center">
+                    <input id="cap-add-today" type="checkbox" checked />
+                    写入 observation 后，立即加入 Today
+                  </label>
+                </div>
+              </div>
+            </section>
+          `;
+          return;
+        }
+
+        page.innerHTML = `
+          <div class="hero" style="padding:34px 0 18px">
+            <div class="hero-label">TODAY · INTAKE LEDGER</div>
+            <h1><strong>当天摄入</strong>（冻结快照，可解释“为什么”）</h1>
+            <p class="hero-sub">每条 entry 会保存当时使用的 observationId 与证据引用。</p>
+          </div>
+          <hr />
+          <div class="grid" style="grid-template-columns:1.2fr 0.8fr">
+            <section class="panel" aria-label="Today">
+              <div class="panel-head">
+                <div class="panel-title">Today</div>
+                <div class="row-actions">
+                  <button class="btn ghost tiny" type="button" id="today-prev">前一天</button>
+                  <input id="today-date" type="date" class="mono tiny" style="border-radius:999px;padding:7px 10px;border:1px solid var(--gray-200)" />
+                  <button class="btn ghost tiny" type="button" id="today-next">后一天</button>
+                </div>
+              </div>
+              <div class="panel-body">
+                <div class="kpi" id="today-totals">
+                  <div class="k">Totals</div>
+                  <div class="v">—</div>
+                  <div class="muted" style="font-size:12px">点 entry 看可追溯明细。</div>
+                </div>
+                <div style="height:12px"></div>
+                <div class="subsection" style="padding:0;border:none">
+                  <div class="subhead" style="padding:0 0 10px">
+                    <h2 style="font-size:14px">Entries</h2>
+                    <div class="hint" id="today-count">—</div>
+                  </div>
+                  <div id="today-entries"></div>
+                </div>
+              </div>
+            </section>
+            <section class="panel" aria-label="Quick Add">
+              <div class="panel-head"><div class="panel-title">Quick Add</div><div class="pillrow"><a class="pill" href="#capture">去 Capture</a></div></div>
+              <div class="panel-body">
+                <div class="field"><div class="label">Food</div><select id="today-food"></select></div>
+                <div style="height:10px"></div>
+                <div class="grid" style="grid-template-columns:1fr 1fr;gap:10px;padding:0">
+                  <div class="field">
+                    <div class="label">Basis</div>
+                    <select id="today-basis">
+                      <option value="per-100g">每 100g</option>
+                      <option value="per-100ml">每 100ml</option>
+                      <option value="per-serving">每份</option>
+                    </select>
+                  </div>
+                  <div class="field"><div class="label">Time</div><input id="today-time" type="time" /></div>
+                </div>
+                <div style="height:10px"></div>
+                <div class="field">
+                  <div class="label">Amount</div>
+                  <div class="mono" style="display:flex;gap:8px;align-items:center">
+                    <input id="today-amt" inputmode="decimal" placeholder="100" />
+                    <span class="pill mono" id="today-amt-unit">g</span>
+                  </div>
+                </div>
+                <div style="height:12px"></div>
+                <div class="row-actions" style="justify-content:flex-end"><button class="btn" type="button" id="today-add">加入 Today</button></div>
+              </div>
+            </section>
+          </div>
+        `;
       }
 
       function renderFoods() {
@@ -799,6 +1065,13 @@
           { kind: "per-100ml", label: "每 100ml" },
           { kind: "per-serving", label: "每份" },
         ];
+      }
+
+      function unitForBasisKind(kind) {
+        const k = String(kind || "");
+        if (k === "per-100ml") return "ml";
+        if (k === "per-serving") return "serving";
+        return "g";
       }
 
       function makeSelectionKey(foodId, nutrientId, basis) {
@@ -925,56 +1198,11 @@
             </table>
           </div>
 
-          <div class="subsection">
-            <div class="subhead">
-              <h2>从标签文本导入（粘贴 OCR 结果）</h2>
-              <div class="row-actions">
-                <button class="btn ghost tiny" type="button" id="btn-parse">解析</button>
-                <button class="btn tiny" type="button" id="btn-save-parsed" disabled>写入观测</button>
-              </div>
-            </div>
-            <div class="hint">
-              建议把 iOS/微信的“复制文字”结果粘贴到这里；解析出来的数值会以多条 observation 写入，并自动设为当前选用值。
-            </div>
-            <div class="grid" style="grid-template-columns:1fr 1fr;gap:10px;padding:0">
-              <div class="field">
-                <div class="label">Basis Override</div>
-                <select id="import-basis">
-                  <option value="auto">auto（从文本识别）</option>
-                  <option value="per-100g">每 100g</option>
-                  <option value="per-100ml">每 100ml</option>
-                  <option value="per-serving">每份</option>
-                </select>
-              </div>
-              <div class="field">
-                <div class="label">Serving Size (optional)</div>
-                <input id="import-serving" placeholder="例如：250ml 或 30g" />
-              </div>
-            </div>
-            <div class="field">
-              <div class="label">Label Text</div>
-              <textarea id="label-text" placeholder="示例：每100g 能量 1500kJ 蛋白质 3.2g 脂肪 5.6g 碳水化合物 10.2g 钠 120mg"></textarea>
-            </div>
-            <div style="height: 10px"></div>
-            <div class="field">
-              <div class="label">Evidence (optional)</div>
-              <select id="label-evidence"></select>
-            </div>
-            <div style="height: 10px"></div>
-            <div class="grid" style="grid-template-columns:1fr 1fr;gap:10px;padding:0">
-              <div class="field">
-                <div class="label">Dataset Version (optional)</div>
-                <input id="import-version" placeholder="例如：2026-01-23" />
-              </div>
-              <div class="field">
-                <div class="label">Source Id (optional)</div>
-                <input id="import-sourceid" placeholder="条码字段/原始主键/…" />
-              </div>
-            </div>
-            <div style="height: 10px"></div>
-            <div id="parse-preview" class="kpi">
-              <div class="k">Preview</div>
-              <div class="v muted">—</div>
+          <div class="kpi" style="margin-top:10px">
+            <div class="k">Workflow</div>
+            <div class="v">默认值在这里；录入去 Capture；摄入去 Today</div>
+            <div class="muted" style="font-size:12px">
+              <a href="#capture" id="go-capture">去 Capture 写入标签数值</a> · <a href="#today" id="go-today">去 Today 记录摄入</a>
             </div>
           </div>
 
@@ -987,8 +1215,10 @@
           state.basis = { kind: v };
           renderDetail(view);
         });
+        $("#go-capture")?.addEventListener("click", () => {
+          state.capture.foodId = view.food.id;
+        });
         wireRowActions(view, basis);
-        wireLabelImport(view);
         wireEvidenceCreate(view);
       }
 
@@ -1660,9 +1890,490 @@
         );
       })();
 
+      function renderFoodOptions(selectEl, { allowEmpty } = {}) {
+        if (!selectEl) return;
+        const opts = [];
+        if (allowEmpty) opts.push(`<option value="">（选择…）</option>`);
+        for (const f of state.foods) {
+          const meta = [f.barcode ? `barcode:${f.barcode}` : "", f.brand ? `brand:${f.brand}` : ""]
+            .filter(Boolean)
+            .join(" · ");
+          opts.push(
+            `<option value="${escapeHtml(f.id)}">${escapeHtml(f.label || "(未命名)")} ${meta ? `· ${escapeHtml(meta)}` : ""}</option>`,
+          );
+        }
+        selectEl.innerHTML = opts.join("");
+      }
+
+      async function renderApp() {
+        const route = routeFromHash();
+        setActiveRoute(route);
+        renderPage(route);
+
+        if (route === "foods") return mountFoods();
+        if (route === "capture") return mountCapture();
+        return mountToday();
+      }
+
+      async function mountFoods() {
+        renderFoods();
+        $("#food-search")?.addEventListener("input", renderFoods);
+        if (state.selectedFoodId && state.foods.some((f) => f.id === state.selectedFoodId)) {
+          await selectFood(state.selectedFoodId);
+        }
+      }
+
+      function pickTotals(view) {
+        const totals = view?.totals || {};
+        const get = (id) => (totals[id]?.value != null ? totals[id] : null);
+        const fmtNum = (n) => (typeof n === "number" ? (Math.round(n * 100) / 100).toString() : "—");
+
+        const kcal = get("energy_kcal");
+        const kj = get("energy_kj");
+        const protein = get("protein_g");
+        const fat = get("fat_g");
+        const carb = get("carb_g");
+        const sodium = get("sodium_mg");
+
+        const parts = [];
+        if (kcal) parts.push(`能量 ${fmtNum(kcal.value)} ${escapeHtml(kcal.unit || "kcal")}`);
+        else if (kj) parts.push(`能量 ${fmtNum(kj.value)} ${escapeHtml(kj.unit || "kJ")}`);
+        if (protein) parts.push(`蛋白质 ${fmtNum(protein.value)} g`);
+        if (fat) parts.push(`脂肪 ${fmtNum(fat.value)} g`);
+        if (carb) parts.push(`碳水 ${fmtNum(carb.value)} g`);
+        if (sodium) parts.push(`钠 ${fmtNum(sodium.value)} mg`);
+        return parts.join(" · ") || "—";
+      }
+
+      async function loadToday() {
+        const date = state.todayDate || localDateNow();
+        const view = await api.get(`/api/today?date=${encodeURIComponent(date)}`);
+        state.todayView = view;
+        renderTodayView(view);
+      }
+
+      function renderTodayView(view) {
+        const totalsEl = $("#today-totals .v");
+        const countEl = $("#today-count");
+        const entriesRoot = $("#today-entries");
+
+        if (totalsEl) totalsEl.textContent = pickTotals(view);
+        if (countEl) countEl.textContent = `${(view.entries || []).filter((e) => !e.voidedAt).length} entries（撤销不计入）`;
+        if (!entriesRoot) return;
+
+        const entries = view.entries || [];
+        if (!entries.length) {
+          entriesRoot.innerHTML = `<div class="muted" style="font-size:12px">暂无记录</div>`;
+          return;
+        }
+
+        const fmtNum = (n) => (typeof n === "number" ? (Math.round(n * 100) / 100).toString() : "—");
+        entriesRoot.innerHTML = entries
+          .map((e) => {
+            const kcal = e.computed?.energy_kcal?.value;
+            const kj = e.computed?.energy_kj?.value;
+            const energy = kcal != null ? `${fmtNum(kcal)} kcal` : kj != null ? `${fmtNum(kj)} kJ` : "—";
+            const p = e.computed?.protein_g?.value;
+            const f = e.computed?.fat_g?.value;
+            const c = e.computed?.carb_g?.value;
+            const s = e.computed?.sodium_mg?.value;
+            const muted = e.voidedAt ? ` <span class="pill">voided</span>` : "";
+            return `
+              <div class="history-item" data-intake="${escapeHtml(e.id)}">
+                <div class="history-top">
+                  <div>
+                    <div class="history-val">${escapeHtml(fmtTime(e.consumedAt))} · ${escapeHtml(e.food?.label || e.foodLabel || e.foodId)}${muted}</div>
+                    <div class="history-meta mono">${escapeHtml(energy)} · P ${escapeHtml(fmtNum(p))} · F ${escapeHtml(fmtNum(f))} · C ${escapeHtml(fmtNum(c))} · Na ${escapeHtml(fmtNum(s))}</div>
+                    <div class="muted" style="font-size:12px;margin-top:2px">${escapeHtml(e.amount?.quantity)} ${escapeHtml(e.amount?.unit)} · ${escapeHtml(basisLabel(e.basis))}</div>
+                  </div>
+                  <div class="row-actions">
+                    <button class="btn ghost tiny" type="button" data-action="why">明细</button>
+                    <button class="btn ghost tiny" type="button" data-action="edit" ${e.voidedAt ? "disabled" : ""}>改量</button>
+                    <button class="btn ghost tiny" type="button" data-action="recalc" ${e.voidedAt ? "disabled" : ""}>重算</button>
+                    <button class="btn tiny" type="button" data-action="void" ${e.voidedAt ? "disabled" : ""}>撤销</button>
+                  </div>
+                </div>
+              </div>
+            `;
+          })
+          .join("");
+
+        $$("[data-intake]").forEach((row) => {
+          const id = row.getAttribute("data-intake");
+          const entry = entries.find((x) => x.id === id);
+          if (!entry) return;
+          row.querySelector('[data-action="why"]')?.addEventListener("click", () => openIntakeWhy(entry));
+          row.querySelector('[data-action="edit"]')?.addEventListener("click", () => openIntakeEdit(entry));
+          row.querySelector('[data-action="recalc"]')?.addEventListener("click", async () => {
+            await api.post("/api/intakes/recalc", { intakeId: entry.id, basis: entry.basis });
+            await loadToday();
+          });
+          row.querySelector('[data-action="void"]')?.addEventListener("click", async () => {
+            if (!confirm("撤销这条 Today entry？（不会删除记录）")) return;
+            await api.post("/api/intakes/void", { intakeId: entry.id, reason: "user_void" });
+            await loadToday();
+          });
+        });
+      }
+
+      function openIntakeWhy(entry) {
+        $("#dlg-title").textContent = "Why (Trace)";
+        $("#dlg-backdrop").setAttribute("aria-hidden", "false");
+        const body = $("#dlg-body");
+        const evidence = state.todayView?.evidence || {};
+        const perBasis = entry.perBasis || {};
+
+        const rows = Object.entries(perBasis)
+          .map(([nutrientId, per]) => {
+            const n = state.nutrients.find((x) => x.id === nutrientId) || { id: nutrientId, label: nutrientId };
+            const c = entry.computed?.[nutrientId];
+            const ev = per.evidenceId ? evidence[per.evidenceId] : null;
+            const thumb = ev?.thumb?.path
+              ? `<img class="thumb" data-lightbox="${escapeHtml(ev.preview?.path || ev.thumb?.path)}" src="${escapeHtml(ev.thumb?.path)}" alt="evidence" />`
+              : "";
+            return `
+              <div class="history-item">
+                <div class="history-top">
+                  <div>
+                    <div class="history-val mono">${escapeHtml(n.label)} <span class="muted">(${escapeHtml(n.id)})</span></div>
+                    <div class="history-meta mono">computed: ${escapeHtml((c?.value ?? "—").toString())} ${escapeHtml(c?.unit || "")}</div>
+                    <div class="muted" style="font-size:12px;margin-top:2px">
+                      perBasis: ${escapeHtml(String(per.value))} ${escapeHtml(per.unit)} · obs: <span class="mono">${escapeHtml(per.observationId || "")}</span><br/>
+                      source: ${escapeHtml(per.source || "")} · method: ${escapeHtml(per.method || "")} · version: ${escapeHtml(per.datasetVersion || "")} · sourceId: ${escapeHtml(per.sourceId || "")}
+                    </div>
+                  </div>
+                  <div>${thumb}</div>
+                </div>
+              </div>
+            `;
+          })
+          .join("");
+
+        body.innerHTML = `
+          <div class="kpi">
+            <div class="k">Entry</div>
+            <div class="v">${escapeHtml(entry.food?.label || entry.foodLabel || entry.foodId)}</div>
+            <div class="muted" style="font-size:12px">${escapeHtml(fmt(entry.consumedAt))} · ${escapeHtml(entry.amount?.quantity)} ${escapeHtml(entry.amount?.unit)} · ${escapeHtml(basisLabel(entry.basis))}</div>
+          </div>
+          <div style="height:12px"></div>
+          ${rows || `<div class="muted" style="font-size:12px">该 food 在此 basis 下暂无可用 observation</div>`}
+        `;
+
+        $$("[data-lightbox]").forEach((img) => img.addEventListener("click", () => openLightbox(img.getAttribute("data-lightbox"), "evidence")));
+      }
+
+      function openIntakeEdit(entry) {
+        $("#dlg-title").textContent = "Edit Amount / Time";
+        $("#dlg-backdrop").setAttribute("aria-hidden", "false");
+        const body = $("#dlg-body");
+        const unit = entry.amount?.unit || unitForBasisKind(entry.basis?.kind);
+        body.innerHTML = `
+          <div class="kpi">
+            <div class="k">Target</div>
+            <div class="v">${escapeHtml(entry.food?.label || entry.foodLabel || entry.foodId)}</div>
+            <div class="muted" style="font-size:12px">会追加一条 intake.patch（不覆盖历史）。</div>
+          </div>
+          <div style="height:12px"></div>
+          <div class="grid" style="grid-template-columns:1fr 1fr;gap:10px;padding:0">
+            <div class="field"><div class="label">Time</div><input id="ie-time" type="time" value="${escapeHtml(fmtTime(entry.consumedAt))}" /></div>
+            <div class="field"><div class="label">Amount (${escapeHtml(unit)})</div><input id="ie-amt" inputmode="decimal" value="${escapeHtml(String(entry.amount?.quantity ?? ""))}" /></div>
+          </div>
+          <div style="height:12px"></div>
+          <div class="row-actions" style="justify-content:flex-end">
+            <button class="btn ghost" type="button" id="btn-cancel">取消</button>
+            <button class="btn" type="button" id="btn-save">保存</button>
+          </div>
+        `;
+
+        $("#btn-cancel").addEventListener("click", closeDialog);
+        $("#btn-save").addEventListener("click", async () => {
+          const time = String($("#ie-time")?.value || "").trim() || fmtTime(entry.consumedAt);
+          const qty = Number.parseFloat(String($("#ie-amt")?.value || "").trim() || "0");
+          if (!qty || qty <= 0) return alert("Amount 必须 > 0");
+          const consumedAt = isoFromLocal(entry.localDate, time);
+          await api.post("/api/intakes/patch", {
+            intakeId: entry.id,
+            reason: "manual_edit",
+            patch: { consumedAt, amount: { quantity: qty, unit } },
+          });
+          closeDialog();
+          await loadToday();
+        });
+      }
+
+      async function mountToday() {
+        const dateInput = $("#today-date");
+        const timeInput = $("#today-time");
+        const basisSel = $("#today-basis");
+        const unitPill = $("#today-amt-unit");
+        const foodSel = $("#today-food");
+        const amtInput = $("#today-amt");
+        const addBtn = $("#today-add");
+
+        if (dateInput) dateInput.value = state.todayDate || localDateNow();
+        if (timeInput) timeInput.value = localTimeNow();
+        renderFoodOptions(foodSel, { allowEmpty: true });
+
+        const syncUnit = () => {
+          const kind = String(basisSel?.value || "per-100g");
+          if (unitPill) unitPill.textContent = unitForBasisKind(kind);
+        };
+        basisSel?.addEventListener("change", syncUnit);
+        syncUnit();
+
+        $("#today-prev")?.addEventListener("click", async () => {
+          const cur = new Date(`${state.todayDate}T00:00:00`);
+          cur.setDate(cur.getDate() - 1);
+          state.todayDate = localDateNowFrom(cur);
+          if (dateInput) dateInput.value = state.todayDate;
+          await loadToday();
+        });
+        $("#today-next")?.addEventListener("click", async () => {
+          const cur = new Date(`${state.todayDate}T00:00:00`);
+          cur.setDate(cur.getDate() + 1);
+          state.todayDate = localDateNowFrom(cur);
+          if (dateInput) dateInput.value = state.todayDate;
+          await loadToday();
+        });
+
+        dateInput?.addEventListener("change", async () => {
+          state.todayDate = String(dateInput.value || "").trim() || localDateNow();
+          await loadToday();
+        });
+
+        addBtn?.addEventListener("click", async () => {
+          const foodId = String(foodSel?.value || "").trim();
+          if (!foodId) return alert("请选择 Food");
+          const kind = String(basisSel?.value || "per-100g");
+          const qty = Number.parseFloat(String(amtInput?.value || "").trim() || "0");
+          if (!qty || qty <= 0) return alert("Amount 必须 > 0");
+          const unit = unitForBasisKind(kind);
+          const consumedAt = isoFromLocal(state.todayDate, String(timeInput?.value || "").trim());
+          await api.post("/api/intakes", {
+            foodId,
+            consumedAt,
+            localDate: state.todayDate,
+            amount: { quantity: qty, unit },
+            basis: { kind },
+            note: "",
+          });
+          amtInput.value = "";
+          await loadToday();
+        });
+
+        await loadToday();
+      }
+
+      function localDateNowFrom(d) {
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      }
+
+      async function mountCapture() {
+        const foodSel = $("#cap-food");
+        const evidenceSel = $("#cap-evidence");
+        const date = $("#cap-today-date");
+        const time = $("#cap-today-time");
+        const amtUnit = $("#cap-amt-unit");
+        const amtInput = $("#cap-amt");
+
+        renderFoodOptions(foodSel, { allowEmpty: true });
+        if (state.capture.foodId) foodSel.value = state.capture.foodId;
+
+        if (date) date.value = state.todayDate || localDateNow();
+        if (time) time.value = localTimeNow();
+
+        const ensureEvidenceOptions = async () => {
+          const foodId = String(foodSel?.value || "").trim();
+          if (!foodId) {
+            if (evidenceSel) evidenceSel.innerHTML = `<option value="">（先选食物）</option>`;
+            return;
+          }
+          const view = await api.get(`/api/foods/${encodeURIComponent(foodId)}`);
+          state.selectedFoodView = view;
+          state.evidenceCache = view.evidence || {};
+          if (evidenceSel) evidenceSel.innerHTML = evidenceSelectOptions(view);
+          if (state.capture.evidenceId) evidenceSel.value = state.capture.evidenceId;
+        };
+
+        await ensureEvidenceOptions();
+        foodSel?.addEventListener("change", async () => {
+          state.capture.foodId = String(foodSel.value || "").trim();
+          await ensureEvidenceOptions();
+        });
+
+        $("#cap-new-food")?.addEventListener("click", openNewFood);
+
+        const defaultQtyForBasisKind = (kind) => (String(kind || "") === "per-serving" ? 1 : 100);
+
+        const syncAmtUnit = () => {
+          const override = String($("#cap-basis")?.value || "auto");
+          const basisKind = override === "auto" ? "per-100g" : override;
+          if (amtUnit) amtUnit.textContent = unitForBasisKind(basisKind);
+          if (amtInput && !String(amtInput.value || "").trim()) amtInput.value = String(defaultQtyForBasisKind(basisKind));
+        };
+        $("#cap-basis")?.addEventListener("change", syncAmtUnit);
+        syncAmtUnit();
+
+        $("#cap-ev-clear")?.addEventListener("click", () => {
+          $("#cap-ev-file").value = "";
+          $("#cap-ev-ocr").value = "";
+          $("#cap-ev-note").value = "";
+          state.capture.evidenceId = "";
+          const box = $("#cap-ev-preview");
+          if (box) box.innerHTML = `<div class="k">Evidence</div><div class="v">未保存</div><div class="muted" style="font-size:12px">保存后可关联到 observation / Today 明细。</div>`;
+          ensureEvidenceOptions();
+        });
+
+        $("#cap-ev-save")?.addEventListener("click", async () => {
+          const foodId = String(foodSel?.value || "").trim();
+          if (!foodId) return alert("请先选择食物");
+          const file = $("#cap-ev-file")?.files?.[0];
+          if (!file) return alert("请选择图片");
+          const uploadToR2 = Boolean($("#cap-ev-upload")?.checked);
+          const ocrText = String($("#cap-ev-ocr")?.value || "");
+          const note = String($("#cap-ev-note")?.value || "");
+          const prepared = await prepareImage(file);
+          const res = await api.post("/api/evidence", {
+            kind: "nutrition_label",
+            preview: { mime: prepared.preview.mime, dataBase64: prepared.preview.dataUrl, width: prepared.preview.width, height: prepared.preview.height },
+            thumb: { mime: prepared.thumb.mime, dataBase64: prepared.thumb.dataUrl, width: prepared.thumb.width, height: prepared.thumb.height },
+            ocrText,
+            note,
+            uploadToR2,
+          });
+          const ev = res?.evidence;
+          if (ev?.id) state.capture.evidenceId = ev.id;
+          const box = $("#cap-ev-preview");
+          const uploadError = res?.uploadError || "";
+          const url = ev?.r2?.url;
+          if (box) {
+            box.innerHTML = `
+              <div class="k">Evidence</div>
+              <div class="v mono">${escapeHtml(ev?.id || "")}</div>
+              <div class="muted" style="font-size:12px">${url ? `R2: ${escapeHtml(url)}` : uploadToR2 ? "R2: no public url / failed" : "R2: off"}${uploadError ? ` · uploadError: ${escapeHtml(uploadError)}` : ""}</div>
+              <div style="height:10px"></div>
+              <img class="thumb" style="width:140px;height:140px" src="${escapeHtml(ev?.thumb?.path || "")}" alt="thumb" data-lightbox="${escapeHtml(ev?.preview?.path || "")}" />
+            `;
+            box.querySelector("[data-lightbox]")?.addEventListener("click", () => openLightbox(ev?.preview?.path || ev?.thumb?.path, "evidence"));
+          }
+          await ensureEvidenceOptions();
+          if (ev?.id && evidenceSel) evidenceSel.value = ev.id;
+        });
+
+        const parseBtn = $("#cap-parse");
+        const commitBtn = $("#cap-commit");
+        const parseV = $("#cap-parse-v");
+        const review = $("#cap-review");
+        let parsed = null;
+
+        const doParse = () => {
+          const text = String($("#cap-text")?.value || "");
+          const override = String($("#cap-basis")?.value || "auto");
+          const servingRaw = String($("#cap-serving")?.value || "").trim();
+          const basisOverride = override === "auto" ? null : { kind: override };
+          parsed = parseLabelText(text, { basisOverride, servingRaw });
+          if (!parseV || !review) return;
+          if (!parsed.items.length) {
+            parseV.textContent = "未识别到数值（可先调整文本或手动录入）";
+            review.innerHTML = "";
+            commitBtn.disabled = true;
+            return;
+          }
+          parseV.innerHTML =
+            `<span class="mono">${escapeHtml(parsed.basisLabel)}</span> · ` +
+            parsed.items.map((i) => `${escapeHtml(i.nutrientId)}=${escapeHtml(i.value)}${escapeHtml(i.unit)}`).join(" · ");
+
+          review.innerHTML = `
+            <table>
+              <thead><tr><th>Nutrient</th><th>Value</th><th>Unit</th></tr></thead>
+              <tbody>
+                ${parsed.items
+                  .map((i) => {
+                    const n = state.nutrients.find((x) => x.id === i.nutrientId) || { label: i.nutrientId };
+                    return `
+                      <tr data-cap-nutrient="${escapeHtml(i.nutrientId)}">
+                        <td>${escapeHtml(n.label)} <span class="muted mono">(${escapeHtml(i.nutrientId)})</span></td>
+                        <td><input class="mono" data-cap="value" value="${escapeHtml(i.value)}" /></td>
+                        <td><input class="mono" data-cap="unit" value="${escapeHtml(i.unit)}" /></td>
+                      </tr>
+                    `;
+                  })
+                  .join("")}
+              </tbody>
+            </table>
+          `;
+          commitBtn.disabled = false;
+        };
+
+        parseBtn?.addEventListener("click", doParse);
+        $("#cap-text")?.addEventListener("keydown", (e) => {
+          if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "enter") doParse();
+        });
+
+        commitBtn?.addEventListener("click", async () => {
+          const foodId = String(foodSel?.value || "").trim();
+          if (!foodId) return alert("请先选择食物");
+          if (!parsed?.items?.length) return alert("请先解析");
+
+          const method = String($("#cap-method")?.value || "label_ocr").trim();
+          const evidenceId = String($("#cap-evidence")?.value || "").trim();
+          const datasetVersion = String($("#cap-version")?.value || "").trim();
+          const sourceId = String($("#cap-sourceid")?.value || "").trim();
+
+          const items = $$("tr[data-cap-nutrient]")
+            .map((tr) => {
+              const nutrientId = tr.getAttribute("data-cap-nutrient");
+              const value = String(tr.querySelector('[data-cap="value"]')?.value || "").trim();
+              const unit = String(tr.querySelector('[data-cap="unit"]')?.value || "").trim();
+              return { nutrientId, value, unit };
+            })
+            .filter((i) => i.nutrientId && i.value && i.unit);
+
+          const observations = items.map((i) => ({
+            foodId,
+            nutrientId: i.nutrientId,
+            value: i.value,
+            unit: i.unit,
+            basis: parsed.basis,
+            method,
+            source: "user",
+            sourceId,
+            datasetVersion,
+            evidenceId: evidenceId || "",
+            note: "import:capture_label_text",
+          }));
+
+          await api.post("/api/observations/batch", { observations });
+
+          const addToday = Boolean($("#cap-add-today")?.checked);
+          if (addToday) {
+            let qty = Number.parseFloat(String($("#cap-amt")?.value || "").trim() || "0");
+            if (!(qty > 0)) qty = defaultQtyForBasisKind(parsed.basis?.kind || "per-100g");
+            if (qty > 0) {
+              const dateStr = String($("#cap-today-date")?.value || state.todayDate || localDateNow());
+              const timeStr = String($("#cap-today-time")?.value || localTimeNow());
+              const unit = unitForBasisKind(parsed.basis?.kind || "per-100g");
+              await api.post("/api/intakes", {
+                foodId,
+                consumedAt: isoFromLocal(dateStr, timeStr),
+                localDate: dateStr,
+                amount: { quantity: qty, unit },
+                basis: parsed.basis,
+                note: "",
+              });
+              state.todayDate = dateStr;
+            }
+          }
+
+          alert("已写入 observation" + (addToday ? "（并加入 Today）" : ""));
+          state.selectedFoodId = foodId;
+          location.hash = "#foods";
+        });
+      }
+
       async function boot() {
         if (location.protocol === "file:") {
-          alert("此页面需要本地 server：请运行 `node html/nutrition-ledger-mvp/server.mjs`，然后打开 http://127.0.0.1:8789");
+          alert("此页面需要本地 server：请运行 `npm start`（或 `node server.mjs`），然后打开 http://127.0.0.1:8789");
           return;
         }
         const bs = await api.get("/api/bootstrap");
@@ -1670,9 +2381,7 @@
         state.foods = bs.foods || [];
         state.nutrients = bs.nutrients || [];
         setPillR2(bs.r2 || {});
-        renderFoods();
-
-        $("#food-search")?.addEventListener("input", renderFoods);
+        state.todayDate = localDateNow();
 
         $("#btn-new-food")?.addEventListener("click", openNewFood);
         $("#btn-export")?.addEventListener("click", async () => {
@@ -1680,6 +2389,9 @@
           const stamp = new Date().toISOString().slice(0, 19).replaceAll(":", "");
           downloadJson(`nutrition-ledger-export-${stamp}.json`, dump);
         });
+
+        window.addEventListener("hashchange", () => renderApp().catch((e) => alert(String(e?.message || e))));
+        await renderApp();
       }
 
       function openNewFood() {
@@ -1716,8 +2428,18 @@
           const res = await api.post("/api/foods", { label, barcode, brand, kind: "packaged" });
           closeDialog();
           state.foods = [res.food, ...state.foods.filter((f) => f.id !== res.food.id)];
-          renderFoods();
-          await selectFood(res.food.id);
+          state.selectedFoodId = res.food.id;
+          state.capture.foodId = res.food.id;
+          if (state.route === "foods") {
+            renderFoods();
+            await selectFood(res.food.id);
+            return;
+          }
+          if (state.route === "capture") {
+            await renderApp();
+            return;
+          }
+          location.hash = "#foods";
         });
       }
 

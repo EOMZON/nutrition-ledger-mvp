@@ -19,6 +19,7 @@ const FILES = {
   observations: path.join(LEDGER_DIR, "observations.jsonl"),
   events: path.join(LEDGER_DIR, "events.jsonl"),
   evidence: path.join(LEDGER_DIR, "evidence.jsonl"),
+  intakes: path.join(LEDGER_DIR, "intakes.jsonl"),
   foods: path.join(STATE_DIR, "foods.json"),
   selections: path.join(STATE_DIR, "selections.json"),
 };
@@ -104,7 +105,7 @@ async function ensureDataFiles() {
   await fs.mkdir(STATE_DIR, { recursive: true });
   await fs.mkdir(BLOBS_DIR, { recursive: true });
 
-  const ledgerFiles = [FILES.observations, FILES.events, FILES.evidence];
+  const ledgerFiles = [FILES.observations, FILES.events, FILES.evidence, FILES.intakes];
   for (const f of ledgerFiles) {
     if (await fileExists(f)) continue;
     await fs.writeFile(f, "", "utf8");
@@ -229,6 +230,34 @@ function mergeEvidenceLedger(records) {
   return byId;
 }
 
+function mergeIntakeLedger(records) {
+  const byId = {};
+  for (const rec of records) {
+    if (!rec || typeof rec !== "object") continue;
+    const id = String(rec.id || "").trim();
+    if (!id) continue;
+
+    if (rec.type === "intake.add") {
+      byId[id] = rec;
+      continue;
+    }
+    if (rec.type === "intake.patch" && rec.patch && typeof rec.patch === "object") {
+      const base = byId[id] && typeof byId[id] === "object" ? byId[id] : { id, type: "intake.add" };
+      byId[id] = deepMerge(base, rec.patch, { updatedAt: rec.createdAt || nowIso() });
+      continue;
+    }
+    if (rec.type === "intake.void") {
+      const base = byId[id] && typeof byId[id] === "object" ? byId[id] : { id, type: "intake.add" };
+      byId[id] = deepMerge(base, {
+        voidedAt: rec.createdAt || nowIso(),
+        voidedReason: String(rec.reason || "").trim(),
+        updatedAt: rec.createdAt || nowIso(),
+      });
+    }
+  }
+  return byId;
+}
+
 function deepMerge(base, ...patches) {
   const out = Array.isArray(base) ? base.slice() : { ...(base || {}) };
   for (const patch of patches) {
@@ -299,6 +328,137 @@ async function getFoodView(foodId) {
     evidence: evidenceById,
     effective,
   };
+}
+
+function parseNumeric(value) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return null;
+  const cleaned = raw.replace(/,/g, "").replace(/[^\d.+-eE]/g, "");
+  const n = Number.parseFloat(cleaned);
+  if (Number.isNaN(n)) return null;
+  return n;
+}
+
+function clampNumber(n, { min = -1e12, max = 1e12 } = {}) {
+  if (typeof n !== "number" || Number.isNaN(n)) return null;
+  return Math.min(max, Math.max(min, n));
+}
+
+function normalizeAmount(amount) {
+  const qty = clampNumber(Number(amount?.quantity), { min: 0, max: 1e9 });
+  const unit = String(amount?.unit || "").trim().toLowerCase();
+  if (qty == null) return null;
+  if (!unit) return null;
+  return { quantity: qty, unit };
+}
+
+function factorFromAmountAndBasis(amount, basis) {
+  const a = normalizeAmount(amount);
+  if (!a) return null;
+  const kind = String(basis?.kind || "");
+
+  if (kind === "per-100g" && a.unit === "g") return a.quantity / 100;
+  if (kind === "per-100ml" && a.unit === "ml") return a.quantity / 100;
+
+  if (kind === "per-serving") {
+    if (a.unit === "serving") return a.quantity;
+    const size = basis?.servingSize;
+    const sizeQty = typeof size?.quantity === "number" ? size.quantity : parseNumeric(size?.quantity);
+    const sizeUnit = String(size?.unit || "").trim().toLowerCase();
+    if (sizeQty && sizeUnit && a.unit === sizeUnit) return a.quantity / sizeQty;
+  }
+
+  return null;
+}
+
+async function getEffectiveObservationsForFood(foodId, basis) {
+  const { selections } = await loadSnapshot();
+  const basisKey = basisKeyFromBasis(basis);
+  const allObservations = (await readJsonl(FILES.observations)).filter(
+    (o) => o.foodId === foodId && basisKeyFromBasis(o.basis) === basisKey,
+  );
+
+  const grouped = {};
+  for (const o of allObservations) {
+    if (!grouped[o.nutrientId]) grouped[o.nutrientId] = [];
+    grouped[o.nutrientId].push(o);
+  }
+
+  const effectiveByNutrient = {};
+  for (const [nutrientId, observations] of Object.entries(grouped)) {
+    const key = makeSelectionKey({ foodId, nutrientId, basis });
+    const sel = selections.byKey?.[key];
+    const selectedId = sel?.selectedObservationId;
+    let picked = selectedId ? observations.find((o) => o.id === selectedId) : null;
+    if (!picked) picked = pickDefaultObservation(observations) || null;
+    if (picked) effectiveByNutrient[nutrientId] = { observation: picked, selection: sel || null };
+  }
+  return effectiveByNutrient;
+}
+
+function localDateFromIso(iso) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function computeIntakeSnapshot({ amount, basis, effectiveByNutrient }) {
+  const factor = factorFromAmountAndBasis(amount, basis);
+  if (factor == null) {
+    return { factor: null, computed: {}, perBasis: {} };
+  }
+
+  const computed = {};
+  const perBasis = {};
+
+  for (const nutrient of NUTRIENTS) {
+    const hit = effectiveByNutrient?.[nutrient.id];
+    const obs = hit?.observation;
+    if (!obs) continue;
+    const per = parseNumeric(obs.value);
+    if (per == null) continue;
+    const unit = String(obs.unit || nutrient.unit || "").trim();
+    if (!unit) continue;
+    const val = clampNumber(per * factor, { min: 0, max: 1e12 });
+    if (val == null) continue;
+    computed[nutrient.id] = { value: val, unit };
+    perBasis[nutrient.id] = {
+      value: per,
+      unit,
+      observationId: obs.id,
+      source: obs.source,
+      sourceId: obs.sourceId,
+      datasetVersion: obs.datasetVersion,
+      method: obs.method,
+      basisKey: basisKeyFromBasis(obs.basis),
+      evidenceId: obs.evidenceId || "",
+    };
+  }
+  return { factor, computed, perBasis };
+}
+
+async function createIntake({ foodId, consumedAt, localDate, amount, basis, note }) {
+  return enqueueWrite(() =>
+    createIntakeNoQueue({ foodId, consumedAt, localDate, amount, basis, note }),
+  );
+}
+
+async function patchIntake({ intakeId, patch, reason }) {
+  return enqueueWrite(() =>
+    patchIntakeNoQueue({ intakeId, patch, reason }),
+  );
+}
+
+async function voidIntake({ intakeId, reason }) {
+  return enqueueWrite(() =>
+    voidIntakeNoQueue({ intakeId, reason }),
+  );
+}
+
+async function recalcIntake({ intakeId, basis }) {
+  return enqueueWrite(() =>
+    recalcIntakeNoQueue({ intakeId, basis }),
+  );
 }
 
 async function createFood({ label, barcode, brand, kind }) {
@@ -456,6 +616,156 @@ async function runUploadToR2(filePath, { keyPrefix }) {
 
 async function createEvidence({ kind, preview, thumb, ocrText, note, uploadToR2 }) {
   return enqueueWrite(() => createEvidenceNoQueue({ kind, preview, thumb, ocrText, note, uploadToR2 }));
+}
+
+async function createIntakeNoQueue({ foodId, consumedAt, localDate, amount, basis, note }) {
+  const { foods } = await loadSnapshot();
+  const food = (foods.items || []).find((f) => f.id === foodId) || null;
+  if (!foodId || !food) throw new Error("foodId invalid");
+
+  const a = normalizeAmount(amount);
+  if (!a) throw new Error("amount.quantity/unit required");
+
+  const now = nowIso();
+  const consumed = String(consumedAt || now).trim() || now;
+  const date = String(localDate || "").trim() || localDateFromIso(consumed) || localDateFromIso(now);
+  if (!date) throw new Error("localDate required");
+
+  const b = basis && typeof basis === "object" ? basis : { kind: "per-100g" };
+  const effective = await getEffectiveObservationsForFood(foodId, b);
+  const snapshot = computeIntakeSnapshot({ amount: a, basis: b, effectiveByNutrient: effective });
+  if (snapshot.factor == null) {
+    throw new Error("amount.unit must match basis (g/ml/serving)");
+  }
+
+  const intakeId = uuid("in");
+  const createdBy = "user:local";
+  const record = {
+    type: "intake.add",
+    id: intakeId,
+    foodId,
+    foodLabel: String(food.label || ""),
+    consumedAt: consumed,
+    localDate: date,
+    amount: a,
+    basis: b,
+    resolvedAt: nowIso(),
+    factor: snapshot.factor,
+    perBasis: snapshot.perBasis,
+    computed: snapshot.computed,
+    note: String(note || "").trim(),
+    createdAt: now,
+    createdBy,
+    updatedAt: now,
+    updatedBy: createdBy,
+  };
+
+  await appendJsonl(FILES.intakes, record);
+  return record;
+}
+
+async function patchIntakeNoQueue({ intakeId, patch, reason }) {
+  const id = String(intakeId || "").trim();
+  if (!id) throw new Error("intakeId required");
+  if (!patch || typeof patch !== "object") throw new Error("patch required");
+
+  const records = await readJsonl(FILES.intakes);
+  const byId = mergeIntakeLedger(records);
+  const current = byId[id];
+  if (!current) throw new Error("intake not found");
+
+  const next = deepMerge(current, patch, {
+    updatedAt: nowIso(),
+    updatedBy: "user:local",
+  });
+
+  let needsRecompute = false;
+  if (patch.amount) needsRecompute = true;
+  if (patch.basis) needsRecompute = true;
+
+  if (needsRecompute) {
+    const a = normalizeAmount(next.amount);
+    const b = next.basis && typeof next.basis === "object" ? next.basis : { kind: "per-100g" };
+    const factor = factorFromAmountAndBasis(a, b);
+    if (factor == null) throw new Error("amount.unit must match basis (g/ml/serving)");
+    next.factor = factor;
+    const computed = {};
+    for (const [nutrientId, per] of Object.entries(next.perBasis || {})) {
+      const base = parseNumeric(per.value);
+      if (base == null) continue;
+      const unit = String(per.unit || "").trim();
+      if (!unit) continue;
+      const val = clampNumber(base * factor, { min: 0, max: 1e12 });
+      if (val == null) continue;
+      computed[nutrientId] = { value: val, unit };
+    }
+    next.computed = computed;
+  }
+
+  const evt = {
+    type: "intake.patch",
+    id,
+    patch: deepMerge(patch, needsRecompute ? { factor: next.factor, computed: next.computed, amount: next.amount, basis: next.basis } : {}),
+    reason: String(reason || "manual_edit"),
+    createdAt: nowIso(),
+    createdBy: "user:local",
+  };
+  await appendJsonl(FILES.intakes, evt);
+  return { intake: next, event: evt };
+}
+
+async function voidIntakeNoQueue({ intakeId, reason }) {
+  const id = String(intakeId || "").trim();
+  if (!id) throw new Error("intakeId required");
+
+  const evt = {
+    type: "intake.void",
+    id,
+    reason: String(reason || "user_void").trim(),
+    createdAt: nowIso(),
+    createdBy: "user:local",
+  };
+  await appendJsonl(FILES.intakes, evt);
+  return { event: evt };
+}
+
+async function recalcIntakeNoQueue({ intakeId, basis }) {
+  const id = String(intakeId || "").trim();
+  if (!id) throw new Error("intakeId required");
+
+  const records = await readJsonl(FILES.intakes);
+  const byId = mergeIntakeLedger(records);
+  const current = byId[id];
+  if (!current) throw new Error("intake not found");
+
+  const b = basis && typeof basis === "object" ? basis : current.basis || { kind: "per-100g" };
+  const a = normalizeAmount(current.amount);
+  if (!a) throw new Error("intake amount invalid");
+
+  const effective = await getEffectiveObservationsForFood(current.foodId, b);
+  const snapshot = computeIntakeSnapshot({ amount: a, basis: b, effectiveByNutrient: effective });
+  if (snapshot.factor == null) throw new Error("amount.unit must match basis (g/ml/serving)");
+
+  const patch = {
+    basis: b,
+    resolvedAt: nowIso(),
+    factor: snapshot.factor,
+    perBasis: snapshot.perBasis,
+    computed: snapshot.computed,
+    updatedAt: nowIso(),
+    updatedBy: "user:local",
+  };
+
+  const evt = {
+    type: "intake.patch",
+    id,
+    patch,
+    reason: "recalc_latest_defaults",
+    createdAt: nowIso(),
+    createdBy: "user:local",
+  };
+  await appendJsonl(FILES.intakes, evt);
+  return { event: evt };
 }
 
 async function createFoodNoQueue({ label, barcode, brand, kind }) {
@@ -685,6 +995,60 @@ async function serveIndex(res) {
   }
 }
 
+async function getTodayView({ date }) {
+  const target = String(date || "").trim() || localDateFromIso(nowIso());
+  const { foods } = await loadSnapshot();
+  const foodsById = {};
+  for (const f of foods.items || []) foodsById[f.id] = f;
+
+  const records = await readJsonl(FILES.intakes);
+  const merged = mergeIntakeLedger(records);
+  const entries = Object.values(merged)
+    .filter((i) => i && typeof i === "object")
+    .filter((i) => String(i.localDate || "") === target)
+    .map((i) => ({
+      ...i,
+      food: foodsById[i.foodId] || null,
+    }))
+    .sort((a, b) => (Date.parse(b.consumedAt || "") || 0) - (Date.parse(a.consumedAt || "") || 0));
+
+  const evidenceIds = new Set();
+  for (const entry of entries) {
+    for (const per of Object.values(entry.perBasis || {})) {
+      const evId = String(per?.evidenceId || "").trim();
+      if (evId) evidenceIds.add(evId);
+    }
+  }
+  let evidence = {};
+  if (evidenceIds.size) {
+    const evidenceLedger = await readJsonl(FILES.evidence);
+    const evidenceById = mergeEvidenceLedger(evidenceLedger);
+    for (const id of evidenceIds) {
+      if (evidenceById[id]) evidence[id] = evidenceById[id];
+    }
+  }
+
+  const totals = {};
+  for (const entry of entries) {
+    if (entry.voidedAt) continue;
+    for (const [nutrientId, val] of Object.entries(entry.computed || {})) {
+      const n = typeof val?.value === "number" ? val.value : parseNumeric(val?.value);
+      if (n == null) continue;
+      if (!totals[nutrientId]) totals[nutrientId] = { value: 0, unit: String(val?.unit || "") };
+      totals[nutrientId].value += n;
+      if (!totals[nutrientId].unit) totals[nutrientId].unit = String(val?.unit || "");
+    }
+  }
+
+  return {
+    date: target,
+    nutrients: NUTRIENTS,
+    entries,
+    totals,
+    evidence,
+  };
+}
+
 async function main() {
   await ensureDataFiles();
 
@@ -754,13 +1118,54 @@ async function main() {
         return json(res, 200, created);
       }
 
+      if (req.method === "GET" && pathname === "/api/today") {
+        const date = url.searchParams.get("date") || "";
+        const view = await getTodayView({ date });
+        return json(res, 200, view);
+      }
+
+      if (req.method === "POST" && pathname === "/api/intakes") {
+        const body = await readJsonBody(req, { limitBytes: 2_000_000 });
+        const created = await createIntake(body || {});
+        return json(res, 200, { intake: created });
+      }
+
+      if (req.method === "POST" && pathname === "/api/intakes/patch") {
+        const body = await readJsonBody(req, { limitBytes: 2_000_000 });
+        const result = await patchIntake({
+          intakeId: body.intakeId,
+          patch: body.patch,
+          reason: body.reason,
+        });
+        return json(res, 200, result);
+      }
+
+      if (req.method === "POST" && pathname === "/api/intakes/void") {
+        const body = await readJsonBody(req, { limitBytes: 1_000_000 });
+        const result = await voidIntake({
+          intakeId: body.intakeId,
+          reason: body.reason,
+        });
+        return json(res, 200, result);
+      }
+
+      if (req.method === "POST" && pathname === "/api/intakes/recalc") {
+        const body = await readJsonBody(req, { limitBytes: 1_000_000 });
+        const result = await recalcIntake({
+          intakeId: body.intakeId,
+          basis: body.basis,
+        });
+        return json(res, 200, result);
+      }
+
       if (req.method === "GET" && pathname === "/api/export") {
         const foods = await readJson(FILES.foods, { version: 1, items: [] });
         const selections = await readJson(FILES.selections, { version: 1, byKey: {} });
         const observations = await readJsonl(FILES.observations);
         const events = await readJsonl(FILES.events);
         const evidence = await readJsonl(FILES.evidence);
-        return json(res, 200, { exportedAt: nowIso(), foods, selections, observations, events, evidence });
+        const intakes = await readJsonl(FILES.intakes);
+        return json(res, 200, { exportedAt: nowIso(), foods, selections, observations, events, evidence, intakes });
       }
 
       return text(res, 404, "Not found");
