@@ -1,15 +1,20 @@
 #!/usr/bin/env node
 import http from "node:http";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promises as fs } from "node:fs";
+import { createReadStream } from "node:fs";
 import crypto from "node:crypto";
-import childProcess from "node:child_process";
 
 const APP_DIR = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(APP_DIR, "../..");
+const CUSTOM_DATA_DIR = Boolean(process.env.NUTRITION_LEDGER_DATA_DIR);
 
-const DATA_DIR = path.resolve(process.env.NUTRITION_LEDGER_DATA_DIR || path.join(APP_DIR, "data"));
+const DEFAULT_DATA_DIR = process.env.VERCEL
+  ? path.join(os.tmpdir(), "nutrition-ledger-mvp")
+  : path.join(APP_DIR, "data");
+const DATA_DIR = path.resolve(process.env.NUTRITION_LEDGER_DATA_DIR || DEFAULT_DATA_DIR);
 const LEDGER_DIR = path.join(DATA_DIR, "ledger");
 const STATE_DIR = path.join(DATA_DIR, "state");
 const BLOBS_DIR = path.join(DATA_DIR, "blobs");
@@ -23,6 +28,73 @@ const FILES = {
   foods: path.join(STATE_DIR, "foods.json"),
   selections: path.join(STATE_DIR, "selections.json"),
 };
+
+const KV_CONFIG = {
+  url: String(process.env.KV_REST_API_URL || "").replace(/\/+$/, ""),
+  token: String(process.env.KV_REST_API_TOKEN || ""),
+  prefix: String(process.env.NUTRITION_LEDGER_KV_PREFIX || "nutrition-ledger-mvp"),
+};
+
+const KV_ENABLED = Boolean(KV_CONFIG.url && KV_CONFIG.token);
+const VERCEL_PERSISTENCE_GUARD = Boolean(process.env.VERCEL && !KV_ENABLED && !CUSTOM_DATA_DIR);
+const PERSISTENCE_GUARD_STATUS = 503;
+const PERSISTENCE_GUARD_MESSAGE =
+  "Vercel deployment detected without KV_REST_API_URL/KV_REST_API_TOKEN or NUTRITION_LEDGER_DATA_DIR. " +
+  "Configure a KV layer or set NUTRITION_LEDGER_DATA_DIR to a writable persistent path before using this runtime.";
+
+function kvKeyForFilePath(filePath) {
+  if (!KV_ENABLED) return null;
+  if (filePath === FILES.observations) return `${KV_CONFIG.prefix}:ledger:observations`;
+  if (filePath === FILES.events) return `${KV_CONFIG.prefix}:ledger:events`;
+  if (filePath === FILES.evidence) return `${KV_CONFIG.prefix}:ledger:evidence`;
+  if (filePath === FILES.intakes) return `${KV_CONFIG.prefix}:ledger:intakes`;
+  if (filePath === FILES.foods) return `${KV_CONFIG.prefix}:state:foods`;
+  if (filePath === FILES.selections) return `${KV_CONFIG.prefix}:state:selections`;
+  return null;
+}
+
+function isKvJsonFile(filePath) {
+  return filePath === FILES.foods || filePath === FILES.selections;
+}
+
+function isKvJsonlFile(filePath) {
+  return (
+    filePath === FILES.observations ||
+    filePath === FILES.events ||
+    filePath === FILES.evidence ||
+    filePath === FILES.intakes
+  );
+}
+
+async function kvExec(command) {
+  if (!KV_ENABLED) throw new Error("KV not configured");
+
+  const res = await fetch(KV_CONFIG.url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${KV_CONFIG.token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(command),
+  });
+
+  const text = await res.text();
+  let json = null;
+  try {
+    json = text ? JSON.parse(text) : null;
+  } catch {
+    json = null;
+  }
+
+  if (!res.ok) {
+    const details = (json && (json.error || json.message)) || text || `HTTP ${res.status}`;
+    const name = Array.isArray(command) && command.length ? String(command[0]) : "command";
+    throw new Error(`KV ${name} failed: ${String(details).trim()}`);
+  }
+
+  return json ? json.result : null;
+}
+
 
 const NUTRIENTS = [
   { id: "energy_kj", label: "能量", unit: "kJ" },
@@ -68,6 +140,18 @@ function text(res, status, body, contentType = "text/plain; charset=utf-8") {
   res.end(body);
 }
 
+function buildPersistenceGuardPayload({ healthCheck } = {}) {
+  if (!VERCEL_PERSISTENCE_GUARD) return null;
+  return {
+    status: PERSISTENCE_GUARD_STATUS,
+    body: {
+      error: "Missing persistence backend",
+      message: PERSISTENCE_GUARD_MESSAGE,
+      ...(healthCheck ? { health: "unhealthy" } : {}),
+    },
+  };
+}
+
 async function readBody(req, { limitBytes }) {
   const chunks = [];
   let total = 0;
@@ -111,6 +195,23 @@ async function ensureDataFiles() {
     await fs.writeFile(f, "", "utf8");
   }
 
+  if (KV_ENABLED) {
+    const foodsKey = kvKeyForFilePath(FILES.foods);
+    const selectionsKey = kvKeyForFilePath(FILES.selections);
+
+    const existingFoods = foodsKey ? await kvExec(["GET", foodsKey]) : null;
+    if (foodsKey && (typeof existingFoods !== "string" || !existingFoods.trim())) {
+      await kvExec(["SET", foodsKey, JSON.stringify({ version: 1, updatedAt: nowIso(), items: [] })]);
+    }
+
+    const existingSelections = selectionsKey ? await kvExec(["GET", selectionsKey]) : null;
+    if (selectionsKey && (typeof existingSelections !== "string" || !existingSelections.trim())) {
+      await kvExec(["SET", selectionsKey, JSON.stringify({ version: 1, updatedAt: nowIso(), byKey: {} })]);
+    }
+
+    return;
+  }
+
   if (!(await fileExists(FILES.foods))) {
     await writeJsonAtomic(FILES.foods, { version: 1, updatedAt: nowIso(), items: [] });
   }
@@ -119,7 +220,26 @@ async function ensureDataFiles() {
   }
 }
 
+let initPromise = null;
+async function ensureInit() {
+  if (!initPromise) initPromise = ensureDataFiles();
+  return initPromise;
+}
+
 async function readJson(filePath, fallback) {
+  if (KV_ENABLED && isKvJsonFile(filePath)) {
+    const key = kvKeyForFilePath(filePath);
+    if (key) {
+      try {
+        const raw = await kvExec(["GET", key]);
+        if (typeof raw === "string" && raw.trim()) return JSON.parse(raw);
+      } catch {
+        // fall back to filesystem
+      }
+    }
+    return fallback;
+  }
+
   try {
     const raw = await fs.readFile(filePath, "utf8");
     return JSON.parse(raw);
@@ -130,12 +250,42 @@ async function readJson(filePath, fallback) {
 }
 
 async function writeJsonAtomic(filePath, value) {
+  if (KV_ENABLED && isKvJsonFile(filePath)) {
+    const key = kvKeyForFilePath(filePath);
+    if (!key) throw new Error("KV key mapping missing");
+    await kvExec(["SET", key, JSON.stringify(value)]);
+    return;
+  }
+
   const tmpPath = `${filePath}.${uuid("tmp")}`;
   await fs.writeFile(tmpPath, JSON.stringify(value, null, 2) + "\n", "utf8");
   await fs.rename(tmpPath, filePath);
 }
 
 async function readJsonl(filePath) {
+  if (KV_ENABLED && isKvJsonlFile(filePath)) {
+    const key = kvKeyForFilePath(filePath);
+    if (key) {
+      try {
+        const result = await kvExec(["LRANGE", key, 0, -1]);
+        const lines = Array.isArray(result) ? result : [];
+        const out = [];
+        for (const line of lines) {
+          if (typeof line !== "string") continue;
+          try {
+            out.push(JSON.parse(line));
+          } catch {
+            continue;
+          }
+        }
+        return out;
+      } catch {
+        // fall back to filesystem
+      }
+    }
+    return [];
+  }
+
   let raw = "";
   try {
     raw = await fs.readFile(filePath, "utf8");
@@ -156,8 +306,16 @@ async function readJsonl(filePath) {
 }
 
 async function appendJsonl(filePath, record) {
+  if (KV_ENABLED && isKvJsonlFile(filePath)) {
+    const key = kvKeyForFilePath(filePath);
+    if (!key) throw new Error("KV key mapping missing");
+    await kvExec(["RPUSH", key, JSON.stringify(record)]);
+    return;
+  }
+
   await fs.appendFile(filePath, JSON.stringify(record) + "\n", "utf8");
 }
+
 
 function normalizeBarcode(input) {
   const raw = String(input || "").trim();
@@ -287,6 +445,26 @@ async function getBootstrap() {
     foods: foods.items || [],
     r2,
   };
+}
+
+async function getEvidenceList({ limit }) {
+  const rawLimit = Number.parseInt(String(limit || "0"), 10);
+  const safeLimit = rawLimit > 0 ? Math.min(500, rawLimit) : 200;
+
+  const evidenceLedger = await readJsonl(FILES.evidence);
+  const evidenceById = mergeEvidenceLedger(evidenceLedger);
+
+  const items = Object.values(evidenceById)
+    .filter((e) => e && typeof e === "object")
+    .filter((e) => e.type === "evidence.create")
+    .sort((a, b) => {
+      const ta = Date.parse(a.updatedAt || a.createdAt || "") || 0;
+      const tb = Date.parse(b.updatedAt || b.createdAt || "") || 0;
+      return tb - ta;
+    })
+    .slice(0, safeLimit);
+
+  return { items, limit: safeLimit, totalApprox: Object.keys(evidenceById).length };
 }
 
 async function getFoodView(foodId) {
@@ -516,41 +694,75 @@ function contentTypeForExt(ext) {
   return "application/octet-stream";
 }
 
-async function detectR2Config() {
+function pickFirst(...values) {
+  for (const v of values) {
+    const s = typeof v === "string" ? v.trim() : "";
+    if (s) return s;
+  }
+  return "";
+}
+
+async function resolveR2Secrets() {
   const localEnvPath = path.join(APP_DIR, ".env");
   const localEnv = await readEnvFile(localEnvPath);
 
   const oldlifeEnvPath = path.join(REPO_ROOT, "8_Workflow/video/OLDLIFEASSONG/.env");
   const oldlifeEnv = await readEnvFile(oldlifeEnvPath);
 
-  const accountId =
-    process.env.CLOUDFLARE_ACCOUNT_ID ||
-    localEnv.CLOUDFLARE_ACCOUNT_ID ||
-    oldlifeEnv.CLOUDFLARE_ACCOUNT_ID ||
-    "";
-  const apiToken =
-    process.env.CLOUDFLARE_API_TOKEN ||
-    localEnv.CLOUDFLARE_API_TOKEN ||
-    oldlifeEnv.CLOUDFLARE_API_TOKEN ||
-    "";
-  const bucket =
-    process.env.R2_BUCKET ||
-    localEnv.R2_BUCKET ||
-    localEnv.R2_BUCKET_NAME ||
-    oldlifeEnv.R2_BUCKET ||
-    oldlifeEnv.R2_BUCKET_NAME ||
-    "";
-  const publicBase =
-    process.env.R2_PUBLIC_BASE_URL ||
-    localEnv.R2_PUBLIC_BASE_URL ||
-    oldlifeEnv.R2_PUBLIC_BASE_URL ||
-    "";
+  const accountId = pickFirst(
+    process.env.CLOUDFLARE_ACCOUNT_ID,
+    localEnv.CLOUDFLARE_ACCOUNT_ID,
+    oldlifeEnv.CLOUDFLARE_ACCOUNT_ID,
+  );
+  const apiToken = pickFirst(
+    process.env.CLOUDFLARE_API_TOKEN,
+    localEnv.CLOUDFLARE_API_TOKEN,
+    oldlifeEnv.CLOUDFLARE_API_TOKEN,
+  );
+
+  const bucket = pickFirst(
+    process.env.R2_BUCKET,
+    process.env.R2_BUCKET_NAME,
+    process.env.BUCKET,
+    process.env.bucket,
+    localEnv.R2_BUCKET,
+    localEnv.R2_BUCKET_NAME,
+    localEnv.BUCKET,
+    localEnv.bucket,
+    oldlifeEnv.R2_BUCKET,
+    oldlifeEnv.R2_BUCKET_NAME,
+    oldlifeEnv.BUCKET,
+    oldlifeEnv.bucket,
+  );
+
+  const publicBase = pickFirst(
+    process.env.R2_PUBLIC_BASE_URL,
+    process.env.PUBLIC_URL,
+    process.env.public_url,
+    localEnv.R2_PUBLIC_BASE_URL,
+    localEnv.PUBLIC_URL,
+    localEnv.public_url,
+    oldlifeEnv.R2_PUBLIC_BASE_URL,
+    oldlifeEnv.PUBLIC_URL,
+    oldlifeEnv.public_url,
+  );
 
   return {
     available: Boolean(accountId && apiToken && bucket),
-    accountId: accountId ? "configured" : "",
-    bucket: bucket || "",
-    publicBase: publicBase || "",
+    accountId,
+    apiToken,
+    bucket,
+    publicBase,
+  };
+}
+
+async function detectR2Config() {
+  const cfg = await resolveR2Secrets();
+  return {
+    available: Boolean(cfg.accountId && cfg.apiToken && cfg.bucket),
+    accountId: cfg.accountId ? "configured" : "",
+    bucket: cfg.bucket || "",
+    publicBase: cfg.publicBase || "",
   };
 }
 
@@ -576,41 +788,52 @@ async function readEnvFile(filePath) {
 }
 
 async function runUploadToR2(filePath, { keyPrefix }) {
-  const localUpload = path.join(APP_DIR, "tools/upload-to-r2.js");
-  const oldlifeUpload = path.join(
-    REPO_ROOT,
-    "8_Workflow/video/OLDLIFEASSONG/TOOLS/cartoon/upload-to-r2.js",
-  );
-  const uploadScript = (await fileExists(localUpload)) ? localUpload : oldlifeUpload;
-  if (!(await fileExists(uploadScript))) throw new Error(`missing upload script: ${uploadScript}`);
+  const cfg = await resolveR2Secrets();
+  if (!cfg.available) {
+    throw new Error("Missing CLOUDFLARE_ACCOUNT_ID / CLOUDFLARE_API_TOKEN / R2_BUCKET in env");
+  }
 
-  const env = {
-    ...process.env,
-    R2_KEY_PREFIX: keyPrefix || "nutrition-ledger/evidence",
-    R2_KEY_MODE: "basename",
-  };
+  const prefix = String(keyPrefix || "nutrition-ledger/evidence")
+    .trim()
+    .replace(/^\/+/, "")
+    .replace(/\/+$/, "");
 
-  await new Promise((resolve, reject) => {
-    const proc = childProcess.spawn(process.execPath, [uploadScript, filePath], { env });
-    proc.stdout.on("data", () => {});
-    let stderr = "";
-    proc.stderr.on("data", (d) => (stderr += String(d)));
-    proc.on("error", reject);
-    proc.on("close", (code) => {
-      if (code === 0) return resolve();
-      reject(new Error(stderr.trim() || `upload-to-r2 exited with code ${code}`));
-    });
+  const objectPath = path.basename(filePath);
+  const key = prefix ? `${prefix}/${objectPath}` : objectPath;
+
+  const data = await fs.readFile(filePath);
+  const ext = path.extname(filePath).toLowerCase();
+  const contentType = contentTypeForExt(ext);
+
+  const url = `https://api.cloudflare.com/client/v4/accounts/${cfg.accountId}/r2/buckets/${encodeURIComponent(
+    cfg.bucket,
+  )}/objects/${encodeURIComponent(key)}`;
+
+  const response = await fetch(url, {
+    method: "PUT",
+    headers: {
+      Authorization: `Bearer ${cfg.apiToken}`,
+      "Content-Type": contentType,
+    },
+    body: data,
   });
 
-  const metaPath = path.join(
-    path.dirname(filePath),
-    `${path.basename(filePath, path.extname(filePath))}.json`,
-  );
-  const meta = await readJson(metaPath, {});
+  if (!response.ok) {
+    let text = "";
+    try {
+      text = await response.text();
+    } catch {
+      text = "";
+    }
+    throw new Error(`R2 upload failed: HTTP ${response.status} ${response.statusText} ${text}`.trim());
+  }
+
+  const publicUrl = cfg.publicBase ? `${cfg.publicBase.replace(/\/+$/, "")}/${key}` : "";
+
   return {
-    url: String(meta.url || "").trim(),
-    r2Bucket: String(meta.r2Bucket || "").trim(),
-    r2Key: String(meta.r2Key || "").trim(),
+    url: publicUrl,
+    r2Bucket: cfg.bucket,
+    r2Key: key,
   };
 }
 
@@ -936,7 +1159,7 @@ async function createEvidenceNoQueue({ kind, preview, thumb, ocrText, note, uplo
       height: thumb.height || null,
       sha256: crypto.createHash("sha256").update(thumbBuf).digest("hex"),
     },
-    r2: { url: "", r2Bucket: "", r2Key: "" },
+    r2: { url: "", thumbUrl: "", r2Bucket: "", r2Key: "", thumbR2Key: "" },
     ocrText: String(ocrText || ""),
     note: String(note || ""),
     createdAt,
@@ -947,8 +1170,15 @@ async function createEvidenceNoQueue({ kind, preview, thumb, ocrText, note, uplo
   let uploadError = "";
   if (uploadToR2) {
     try {
-      const uploaded = await runUploadToR2(previewPath, { keyPrefix: "nutrition-ledger/evidence" });
-      record.r2 = uploaded;
+      const uploadedPreview = await runUploadToR2(previewPath, { keyPrefix: "nutrition-ledger/evidence" });
+      const uploadedThumb = await runUploadToR2(thumbPath, { keyPrefix: "nutrition-ledger/evidence" });
+      record.r2 = {
+        url: uploadedPreview.url || "",
+        thumbUrl: uploadedThumb.url || uploadedPreview.url || "",
+        r2Bucket: uploadedPreview.r2Bucket || uploadedThumb.r2Bucket || "",
+        r2Key: uploadedPreview.r2Key || "",
+        thumbR2Key: uploadedThumb.r2Key || "",
+      };
       record.updatedAt = nowIso();
     } catch (err) {
       uploadError = err instanceof Error ? err.message : String(err);
@@ -979,7 +1209,7 @@ async function serveBlob(req, res, pathname) {
     const ext = path.extname(abs).toLowerCase();
     const ct = contentTypeForExt(ext);
     res.writeHead(200, { "Content-Type": ct, "Cache-Control": "no-store" });
-    fs.createReadStream(abs).pipe(res);
+    createReadStream(abs).pipe(res);
   } catch (err) {
     if (err && typeof err === "object" && err.code === "ENOENT") return text(res, 404, "Not found");
     throw err;
@@ -1049,130 +1279,172 @@ async function getTodayView({ date }) {
   };
 }
 
+export async function handleHttpRequest(req, res) {
+  const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
+  const { pathname } = url;
+
+  try {
+    const guardPayload = buildPersistenceGuardPayload({ healthCheck: pathname === "/api/health" });
+    if (guardPayload) {
+      return json(res, guardPayload.status, guardPayload.body);
+    }
+
+    if (req.method === "GET" && pathname === "/api/health") {
+      return json(res, 200, {
+        status: "ok",
+        persistence: {
+          kvEnabled: KV_ENABLED,
+          customDataDir: CUSTOM_DATA_DIR,
+          dataDir: DATA_DIR,
+        },
+      });
+    }
+
+    await ensureInit();
+
+    if (req.method === "GET" && (pathname === "/" || pathname === "/index.html")) {
+      return await serveIndex(res);
+    }
+
+    if (req.method === "GET" && pathname.startsWith("/blobs/")) {
+      return await serveBlob(req, res, pathname);
+    }
+
+    if (req.method === "GET" && pathname === "/api/bootstrap") {
+      return json(res, 200, await getBootstrap());
+    }
+
+    if (req.method === "GET" && pathname === "/api/evidence") {
+      const limit = url.searchParams.get("limit") || "";
+      return json(res, 200, await getEvidenceList({ limit }));
+    }
+
+    if (req.method === "POST" && pathname === "/api/foods") {
+      const body = await readJsonBody(req, { limitBytes: 1_000_000 });
+      const food = await createFood(body || {});
+      return json(res, 200, { food });
+    }
+
+    if (req.method === "GET" && pathname.startsWith("/api/foods/")) {
+      const foodId = decodeURIComponent(pathname.replace(/^\/api\/foods\//, ""));
+      const view = await getFoodView(foodId);
+      if (!view) return json(res, 404, { error: "food not found" });
+      return json(res, 200, view);
+    }
+
+    if (req.method === "POST" && pathname === "/api/observations") {
+      const body = await readJsonBody(req, { limitBytes: 2_000_000 });
+      const obs = await createObservation(body || {});
+      return json(res, 200, { observation: obs });
+    }
+
+    if (req.method === "POST" && pathname === "/api/observations/batch") {
+      const body = await readJsonBody(req, { limitBytes: 6_000_000 });
+      const created = await createObservationsBatch(body || {});
+      return json(res, 200, { observations: created });
+    }
+
+    if (req.method === "POST" && pathname === "/api/selections") {
+      const body = await readJsonBody(req, { limitBytes: 1_000_000 });
+      const result = await setSelection({
+        foodId: body.foodId,
+        nutrientId: body.nutrientId,
+        basis: body.basis,
+        toObservationId: body.toObservationId,
+        mode: body.mode,
+        reason: body.reason,
+        by: "user:local",
+        fromObservationId: body.fromObservationId || "",
+      });
+      return json(res, 200, result);
+    }
+
+    if (req.method === "POST" && pathname === "/api/evidence") {
+      const body = await readJsonBody(req, { limitBytes: 12_000_000 });
+      const created = await createEvidence(body || {});
+      return json(res, 200, created);
+    }
+
+    if (req.method === "GET" && pathname === "/api/today") {
+      const date = url.searchParams.get("date") || "";
+      const view = await getTodayView({ date });
+      return json(res, 200, view);
+    }
+
+    if (req.method === "POST" && pathname === "/api/intakes") {
+      const body = await readJsonBody(req, { limitBytes: 2_000_000 });
+      const created = await createIntake(body || {});
+      return json(res, 200, { intake: created });
+    }
+
+    if (req.method === "POST" && pathname === "/api/intakes/patch") {
+      const body = await readJsonBody(req, { limitBytes: 2_000_000 });
+      const result = await patchIntake({
+        intakeId: body.intakeId,
+        patch: body.patch,
+        reason: body.reason,
+      });
+      return json(res, 200, result);
+    }
+
+    if (req.method === "POST" && pathname === "/api/intakes/void") {
+      const body = await readJsonBody(req, { limitBytes: 1_000_000 });
+      const result = await voidIntake({
+        intakeId: body.intakeId,
+        reason: body.reason,
+      });
+      return json(res, 200, result);
+    }
+
+    if (req.method === "POST" && pathname === "/api/intakes/recalc") {
+      const body = await readJsonBody(req, { limitBytes: 1_000_000 });
+      const result = await recalcIntake({
+        intakeId: body.intakeId,
+        basis: body.basis,
+      });
+      return json(res, 200, result);
+    }
+
+    if (req.method === "GET" && pathname === "/api/export") {
+      const foods = await readJson(FILES.foods, { version: 1, items: [] });
+      const selections = await readJson(FILES.selections, { version: 1, byKey: {} });
+      const observations = await readJsonl(FILES.observations);
+      const events = await readJsonl(FILES.events);
+      const evidence = await readJsonl(FILES.evidence);
+      const intakes = await readJsonl(FILES.intakes);
+      return json(res, 200, { exportedAt: nowIso(), foods, selections, observations, events, evidence, intakes });
+    }
+
+    return text(res, 404, "Not found");
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    // If we already started streaming a response (e.g. /blobs/*), we cannot
+    // send a JSON error body. Just end the connection.
+    if (res.headersSent) {
+      try {
+        res.end();
+      } catch {
+        // ignore
+      }
+      return;
+    }
+    return json(res, 400, { error: message });
+  }
+}
+
 async function main() {
-  await ensureDataFiles();
+  if (VERCEL_PERSISTENCE_GUARD) {
+    // eslint-disable-next-line no-console
+    console.error(PERSISTENCE_GUARD_MESSAGE);
+    process.exit(1);
+  }
+  await ensureInit();
 
   const port = Number.parseInt(process.env.PORT || "8789", 10);
   const host = String(process.env.HOST || "127.0.0.1");
 
-  const server = http.createServer(async (req, res) => {
-    const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
-    const { pathname } = url;
-
-    try {
-      if (req.method === "GET" && (pathname === "/" || pathname === "/index.html")) {
-        return await serveIndex(res);
-      }
-
-      if (req.method === "GET" && pathname.startsWith("/blobs/")) {
-        return await serveBlob(req, res, pathname);
-      }
-
-      if (req.method === "GET" && pathname === "/api/bootstrap") {
-        return json(res, 200, await getBootstrap());
-      }
-
-      if (req.method === "POST" && pathname === "/api/foods") {
-        const body = await readJsonBody(req, { limitBytes: 1_000_000 });
-        const food = await createFood(body || {});
-        return json(res, 200, { food });
-      }
-
-      if (req.method === "GET" && pathname.startsWith("/api/foods/")) {
-        const foodId = decodeURIComponent(pathname.replace(/^\/api\/foods\//, ""));
-        const view = await getFoodView(foodId);
-        if (!view) return json(res, 404, { error: "food not found" });
-        return json(res, 200, view);
-      }
-
-      if (req.method === "POST" && pathname === "/api/observations") {
-        const body = await readJsonBody(req, { limitBytes: 2_000_000 });
-        const obs = await createObservation(body || {});
-        return json(res, 200, { observation: obs });
-      }
-
-      if (req.method === "POST" && pathname === "/api/observations/batch") {
-        const body = await readJsonBody(req, { limitBytes: 6_000_000 });
-        const created = await createObservationsBatch(body || {});
-        return json(res, 200, { observations: created });
-      }
-
-      if (req.method === "POST" && pathname === "/api/selections") {
-        const body = await readJsonBody(req, { limitBytes: 1_000_000 });
-        const result = await setSelection({
-          foodId: body.foodId,
-          nutrientId: body.nutrientId,
-          basis: body.basis,
-          toObservationId: body.toObservationId,
-          mode: body.mode,
-          reason: body.reason,
-          by: "user:local",
-          fromObservationId: body.fromObservationId || "",
-        });
-        return json(res, 200, result);
-      }
-
-      if (req.method === "POST" && pathname === "/api/evidence") {
-        const body = await readJsonBody(req, { limitBytes: 12_000_000 });
-        const created = await createEvidence(body || {});
-        return json(res, 200, created);
-      }
-
-      if (req.method === "GET" && pathname === "/api/today") {
-        const date = url.searchParams.get("date") || "";
-        const view = await getTodayView({ date });
-        return json(res, 200, view);
-      }
-
-      if (req.method === "POST" && pathname === "/api/intakes") {
-        const body = await readJsonBody(req, { limitBytes: 2_000_000 });
-        const created = await createIntake(body || {});
-        return json(res, 200, { intake: created });
-      }
-
-      if (req.method === "POST" && pathname === "/api/intakes/patch") {
-        const body = await readJsonBody(req, { limitBytes: 2_000_000 });
-        const result = await patchIntake({
-          intakeId: body.intakeId,
-          patch: body.patch,
-          reason: body.reason,
-        });
-        return json(res, 200, result);
-      }
-
-      if (req.method === "POST" && pathname === "/api/intakes/void") {
-        const body = await readJsonBody(req, { limitBytes: 1_000_000 });
-        const result = await voidIntake({
-          intakeId: body.intakeId,
-          reason: body.reason,
-        });
-        return json(res, 200, result);
-      }
-
-      if (req.method === "POST" && pathname === "/api/intakes/recalc") {
-        const body = await readJsonBody(req, { limitBytes: 1_000_000 });
-        const result = await recalcIntake({
-          intakeId: body.intakeId,
-          basis: body.basis,
-        });
-        return json(res, 200, result);
-      }
-
-      if (req.method === "GET" && pathname === "/api/export") {
-        const foods = await readJson(FILES.foods, { version: 1, items: [] });
-        const selections = await readJson(FILES.selections, { version: 1, byKey: {} });
-        const observations = await readJsonl(FILES.observations);
-        const events = await readJsonl(FILES.events);
-        const evidence = await readJsonl(FILES.evidence);
-        const intakes = await readJsonl(FILES.intakes);
-        return json(res, 200, { exportedAt: nowIso(), foods, selections, observations, events, evidence, intakes });
-      }
-
-      return text(res, 404, "Not found");
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      return json(res, 400, { error: message });
-    }
+  const server = http.createServer((req, res) => {
+    void handleHttpRequest(req, res);
   });
 
   server.on("error", (err) => {
@@ -1187,8 +1459,11 @@ async function main() {
   });
 }
 
-main().catch((err) => {
-  // eslint-disable-next-line no-console
-  console.error(err);
-  process.exit(1);
-});
+const THIS_FILE = fileURLToPath(import.meta.url);
+if (process.argv[1] && path.resolve(process.argv[1]) === THIS_FILE) {
+  main().catch((err) => {
+    // eslint-disable-next-line no-console
+    console.error(err);
+    process.exit(1);
+  });
+}

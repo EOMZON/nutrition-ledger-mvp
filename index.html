@@ -616,6 +616,7 @@
         <nav class="nav" aria-label="Primary">
           <a class="tab" href="#today" data-route="today" aria-current="page">Today</a>
           <a class="tab" href="#capture" data-route="capture">Capture</a>
+          <a class="tab" href="#evidence" data-route="evidence">Evidence</a>
           <a class="tab" href="#foods" data-route="foods">Foods</a>
         </nav>
         <div class="actions">
@@ -757,6 +758,7 @@
       function routeFromHash() {
         const raw = String(location.hash || "").replace(/^#/, "");
         if (raw === "capture") return "capture";
+        if (raw === "evidence") return "evidence";
         if (raw === "foods") return "foods";
         return "today";
       }
@@ -773,6 +775,37 @@
       function renderPage(route) {
         const page = $("#page");
         if (!page) return;
+
+        if (route === "evidence") {
+          page.innerHTML = `
+            <div class="hero" style="padding:34px 0 18px">
+              <div class="hero-label">EVIDENCE · INBOX</div>
+              <h1><strong>证据图片</strong>（手机上传 → 可回看）</h1>
+              <p class="hero-sub">这里展示最近入库的证据图（Feishu / 网页上传等）。点缩略图可放大。</p>
+            </div>
+            <hr />
+            <div class="grid">
+              <section class="panel" aria-label="Evidence">
+                <div class="panel-head">
+                  <div class="panel-title">Evidence</div>
+                  <div class="row-actions">
+                    <button class="btn ghost tiny" id="ev-refresh" type="button">刷新</button>
+                  </div>
+                </div>
+                <div class="panel-body">
+                  <div class="kpi">
+                    <div class="k">Count</div>
+                    <div class="v mono" id="evidence-count">—</div>
+                    <div class="muted" style="font-size:12px">缩略图来自 <span class="mono">/blobs/*</span></div>
+                  </div>
+                  <div style="height:12px"></div>
+                  <div id="evidence-list"></div>
+                </div>
+              </section>
+            </div>
+          `;
+          return;
+        }
 
         if (route === "foods") {
           page.innerHTML = `
@@ -1911,8 +1944,78 @@
         renderPage(route);
 
         if (route === "foods") return mountFoods();
+        if (route === "evidence") return mountEvidence();
         if (route === "capture") return mountCapture();
         return mountToday();
+      }
+
+      async function mountEvidence() {
+        const load = async () => {
+          const data = await api.get("/api/evidence?limit=200");
+          renderEvidenceInbox(data || {});
+        };
+
+        $("#ev-refresh")?.addEventListener("click", () => load().catch((e) => alert(String(e?.message || e))));
+        await load();
+      }
+
+      function parseEvidenceNote(note) {
+        try {
+          const obj = JSON.parse(String(note || ""));
+          if (obj && typeof obj === "object") return obj;
+        } catch {
+          // ignore
+        }
+        return null;
+      }
+
+      function renderEvidenceInbox(data) {
+        const items = Array.isArray(data?.items) ? data.items : [];
+        const countEl = $("#evidence-count");
+        const root = $("#evidence-list");
+        if (countEl) countEl.textContent = `${items.length} / ${data?.limit || items.length} (total≈${data?.totalApprox ?? "—"})`;
+        if (!root) return;
+
+        if (items.length === 0) {
+          root.innerHTML = `<div class="muted" style="font-size:12px">暂无证据图片（先从飞书发一张图给 bot）</div>`;
+          return;
+        }
+
+        root.innerHTML = `
+          <div class="list">
+            ${items
+              .map((ev) => {
+                const createdAt = ev?.createdAt || ev?.updatedAt || "";
+                const id = String(ev?.id || "").trim();
+                const kind = String(ev?.kind || "evidence");
+                const thumb = String(ev?.thumb?.path || "");
+                const preview = String(ev?.preview?.path || ev?.thumb?.path || "");
+                const note = parseEvidenceNote(ev?.note);
+                const from = note?.source === "feishu" ? `feishu · ${String(note?.senderOpenId || "").slice(0, 10)}…` : note?.source ? String(note.source) : "";
+                const msgId = note?.messageId ? String(note.messageId).slice(0, 12) + "…" : "";
+                const meta = [from, msgId].filter(Boolean).join(" · ");
+                const thumbHtml = thumb
+                  ? `<img class="thumb" style="width:120px;height:120px" data-lightbox="${escapeHtml(preview)}" src="${escapeHtml(thumb)}" alt="evidence" />`
+                  : `<div class="thumb" style="width:120px;height:120px;display:flex;align-items:center;justify-content:center"><span class="muted">no thumb</span></div>`;
+                return `
+                  <div class="history-item">
+                    <div class="history-top">
+                      <div>
+                        <div class="history-val">${escapeHtml(kind)} · <span class="mono">${escapeHtml(id)}</span></div>
+                        <div class="muted" style="font-size:12px;margin-top:2px">${escapeHtml(fmt(createdAt))}${meta ? ` · ${escapeHtml(meta)}` : ""}</div>
+                      </div>
+                      <div>${thumbHtml}</div>
+                    </div>
+                  </div>
+                `;
+              })
+              .join("")}
+          </div>
+        `;
+
+        $$("[data-lightbox]").forEach((img) =>
+          img.addEventListener("click", () => openLightbox(img.getAttribute("data-lightbox"), "evidence")),
+        );
       }
 
       async function mountFoods() {
