@@ -3,6 +3,7 @@
 Date: 2026-08-31  
 Branch: `codex/production-release-20260830`  
 Checkpoint before release work: `0c4f7bc5843139fc48e7aa7472dd4c5302ff9eca`
+Release implementation commit: `6523cc9e4ef75762534c6d87b3c7805fd3a014ce`
 
 ## Outcome
 
