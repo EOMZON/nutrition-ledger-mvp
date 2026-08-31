@@ -102,9 +102,34 @@ R2_PUBLIC_BASE_URL=https://...
 
 然后在网页里勾选“上传到 R2”即可。
 
-## Playwright e2e（可选）
+## Vercel 云端运行
+
+线上部署使用 Vercel Marketplace 的 Upstash for Redis，状态快照、追加记录和 Evidence 图片都存入受保护的 KV；Vercel 函数的 `/tmp` 只作为运行时目录，不是持久化来源。
+
+必须配置：
+
+- `KV_REST_API_URL`、`KV_REST_API_TOKEN`：由 Upstash 集成注入。
+- `NUTRITION_LEDGER_KV_PREFIX`：Preview 与 Production 必须使用不同前缀，避免测试数据污染生产账本。
+- Preview 可运行完整写入 E2E；Production 只运行 `E2E_READ_ONLY=1` canary。
+
+生产部署必须保持 Vercel SSO Protection。不要给生产部署绑定绕过 SSO 的公开 alias；本地 `data/` 里的私人记录也不会自动迁移到云端。
+
+## Playwright E2E
 
 ```bash
-npx playwright install chromium
-npm run test:e2e
+# 本地：复用系统 Chrome，不下载 bundled Chromium
+E2E_PORT=18899 npm run test:e2e:local
+
+# 受保护 Preview：cookie jar 只放临时目录，不提交
+E2E_BASE_URL=https://<preview-url> \
+E2E_COOKIE_JAR=/tmp/<preview-cookie-jar> \
+E2E_BROWSER_CHANNEL=chrome \
+npx playwright test
+
+# Production：只读 canary
+E2E_BASE_URL=https://<protected-production-deployment-url> \
+E2E_COOKIE_JAR=/tmp/<production-cookie-jar> \
+E2E_BROWSER_CHANNEL=chrome \
+E2E_READ_ONLY=1 \
+npx playwright test
 ```

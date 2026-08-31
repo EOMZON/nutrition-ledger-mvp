@@ -1988,12 +1988,13 @@
                 const createdAt = ev?.createdAt || ev?.updatedAt || "";
                 const id = String(ev?.id || "").trim();
                 const kind = String(ev?.kind || "evidence");
-                const thumb = String(ev?.thumb?.path || "");
-                const preview = String(ev?.preview?.path || ev?.thumb?.path || "");
-                const note = parseEvidenceNote(ev?.note);
+                const thumb = String(ev?.r2?.thumbUrl || ev?.thumb?.path || "");
+                const preview = String(ev?.r2?.url || ev?.preview?.path || ev?.r2?.thumbUrl || ev?.thumb?.path || "");
+                const rawNote = String(ev?.note || "").trim();
+                const note = parseEvidenceNote(rawNote);
                 const from = note?.source === "feishu" ? `feishu · ${String(note?.senderOpenId || "").slice(0, 10)}…` : note?.source ? String(note.source) : "";
                 const msgId = note?.messageId ? String(note.messageId).slice(0, 12) + "…" : "";
-                const meta = [from, msgId].filter(Boolean).join(" · ");
+                const meta = [from, msgId, note ? "" : rawNote].filter(Boolean).join(" · ");
                 const thumbHtml = thumb
                   ? `<img class="thumb" style="width:120px;height:120px" data-lightbox="${escapeHtml(preview)}" src="${escapeHtml(thumb)}" alt="evidence" />`
                   : `<div class="thumb" style="width:120px;height:120px;display:flex;align-items:center;justify-content:center"><span class="muted">no thumb</span></div>`;
@@ -2131,8 +2132,8 @@
             const n = state.nutrients.find((x) => x.id === nutrientId) || { id: nutrientId, label: nutrientId };
             const c = entry.computed?.[nutrientId];
             const ev = per.evidenceId ? evidence[per.evidenceId] : null;
-            const thumb = ev?.thumb?.path
-              ? `<img class="thumb" data-lightbox="${escapeHtml(ev.preview?.path || ev.thumb?.path)}" src="${escapeHtml(ev.thumb?.path)}" alt="evidence" />`
+            const thumb = ev?.thumb?.path || ev?.r2?.thumbUrl
+              ? `<img class="thumb" data-lightbox="${escapeHtml(ev.r2?.url || ev.preview?.path || ev.r2?.thumbUrl || ev.thumb?.path)}" src="${escapeHtml(ev.r2?.thumbUrl || ev.thumb?.path)}" alt="evidence" />`
               : "";
             return `
               <div class="history-item">
@@ -2495,6 +2496,7 @@
 
         window.addEventListener("hashchange", () => renderApp().catch((e) => alert(String(e?.message || e))));
         await renderApp();
+        document.body.dataset.appReady = "true";
       }
 
       function openNewFood() {

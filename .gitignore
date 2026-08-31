@@ -8,3 +8,4 @@ yarn-error.log*
 test-results
 playwright-report
 .vercel
+.env*.local

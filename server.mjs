@@ -4,7 +4,6 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promises as fs } from "node:fs";
-import { createReadStream } from "node:fs";
 import crypto from "node:crypto";
 
 const APP_DIR = path.dirname(fileURLToPath(import.meta.url));
@@ -30,8 +29,8 @@ const FILES = {
 };
 
 const KV_CONFIG = {
-  url: String(process.env.KV_REST_API_URL || "").replace(/\/+$/, ""),
-  token: String(process.env.KV_REST_API_TOKEN || ""),
+  url: String(process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL || "").replace(/\/+$/, ""),
+  token: String(process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN || ""),
   prefix: String(process.env.NUTRITION_LEDGER_KV_PREFIX || "nutrition-ledger-mvp"),
 };
 
@@ -51,6 +50,10 @@ function kvKeyForFilePath(filePath) {
   if (filePath === FILES.foods) return `${KV_CONFIG.prefix}:state:foods`;
   if (filePath === FILES.selections) return `${KV_CONFIG.prefix}:state:selections`;
   return null;
+}
+
+function kvKeyForBlobName(name) {
+  return `${KV_CONFIG.prefix}:blob:${path.basename(String(name || ""))}`;
 }
 
 function isKvJsonFile(filePath) {
@@ -230,12 +233,8 @@ async function readJson(filePath, fallback) {
   if (KV_ENABLED && isKvJsonFile(filePath)) {
     const key = kvKeyForFilePath(filePath);
     if (key) {
-      try {
-        const raw = await kvExec(["GET", key]);
-        if (typeof raw === "string" && raw.trim()) return JSON.parse(raw);
-      } catch {
-        // fall back to filesystem
-      }
+      const raw = await kvExec(["GET", key]);
+      if (typeof raw === "string" && raw.trim()) return JSON.parse(raw);
     }
     return fallback;
   }
@@ -266,22 +265,18 @@ async function readJsonl(filePath) {
   if (KV_ENABLED && isKvJsonlFile(filePath)) {
     const key = kvKeyForFilePath(filePath);
     if (key) {
-      try {
-        const result = await kvExec(["LRANGE", key, 0, -1]);
-        const lines = Array.isArray(result) ? result : [];
-        const out = [];
-        for (const line of lines) {
-          if (typeof line !== "string") continue;
-          try {
-            out.push(JSON.parse(line));
-          } catch {
-            continue;
-          }
+      const result = await kvExec(["LRANGE", key, 0, -1]);
+      const lines = Array.isArray(result) ? result : [];
+      const out = [];
+      for (const line of lines) {
+        if (typeof line !== "string") continue;
+        try {
+          out.push(JSON.parse(line));
+        } catch {
+          continue;
         }
-        return out;
-      } catch {
-        // fall back to filesystem
       }
+      return out;
     }
     return [];
   }
@@ -314,6 +309,29 @@ async function appendJsonl(filePath, record) {
   }
 
   await fs.appendFile(filePath, JSON.stringify(record) + "\n", "utf8");
+}
+
+async function writeBlob(name, buffer) {
+  if (KV_ENABLED) {
+    await kvExec(["SET", kvKeyForBlobName(name), buffer.toString("base64")]);
+    await fs.writeFile(path.join(BLOBS_DIR, path.basename(name)), buffer);
+    return;
+  }
+  await fs.writeFile(path.join(BLOBS_DIR, path.basename(name)), buffer);
+}
+
+async function readBlob(name) {
+  if (KV_ENABLED) {
+    const raw = await kvExec(["GET", kvKeyForBlobName(name)]);
+    if (typeof raw !== "string" || !raw) return null;
+    return Buffer.from(raw, "base64");
+  }
+  try {
+    return await fs.readFile(path.join(BLOBS_DIR, path.basename(name)));
+  } catch (err) {
+    if (err && typeof err === "object" && err.code === "ENOENT") return null;
+    throw err;
+  }
 }
 
 
@@ -1134,8 +1152,7 @@ async function createEvidenceNoQueue({ kind, preview, thumb, ocrText, note, uplo
 
   const previewPath = path.join(BLOBS_DIR, previewName);
   const thumbPath = path.join(BLOBS_DIR, thumbName);
-  await fs.writeFile(previewPath, previewBuf);
-  await fs.writeFile(thumbPath, thumbBuf);
+  await Promise.all([writeBlob(previewName, previewBuf), writeBlob(thumbName, thumbBuf)]);
 
   const createdAt = nowIso();
   const createdBy = "user:local";
@@ -1202,18 +1219,15 @@ async function createEvidenceNoQueue({ kind, preview, thumb, ocrText, note, uplo
 async function serveBlob(req, res, pathname) {
   const name = path.basename(pathname.replace(/^\/blobs\//, ""));
   if (!name) return text(res, 404, "Not found");
-  const abs = path.join(BLOBS_DIR, name);
-  try {
-    const stat = await fs.stat(abs);
-    if (!stat.isFile()) return text(res, 404, "Not found");
-    const ext = path.extname(abs).toLowerCase();
-    const ct = contentTypeForExt(ext);
-    res.writeHead(200, { "Content-Type": ct, "Cache-Control": "no-store" });
-    createReadStream(abs).pipe(res);
-  } catch (err) {
-    if (err && typeof err === "object" && err.code === "ENOENT") return text(res, 404, "Not found");
-    throw err;
-  }
+  const body = await readBlob(name);
+  if (!body) return text(res, 404, "Not found");
+  const ct = contentTypeForExt(path.extname(name).toLowerCase());
+  res.writeHead(200, {
+    "Content-Type": ct,
+    "Content-Length": body.length,
+    "Cache-Control": "private, no-store",
+  });
+  res.end(body);
 }
 
 async function serveIndex(res) {
@@ -1294,6 +1308,7 @@ export async function handleHttpRequest(req, res) {
         status: "ok",
         persistence: {
           kvEnabled: KV_ENABLED,
+          blobBackend: KV_ENABLED ? "kv" : "filesystem",
           customDataDir: CUSTOM_DATA_DIR,
           dataDir: DATA_DIR,
         },
