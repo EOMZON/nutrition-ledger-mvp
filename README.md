@@ -1,15 +1,52 @@
 # Nutrition Ledger MVP (Local‑first)
 
-本目录是一个“可溯源的营养数据账本”MVP：用 **JSONL 追加写**记录每条数值来源，用 **selection 指针 + event** 支持回滚/切换数据源；证据图片可选上传到 Cloudflare R2；并新增 **Today（摄入账本）** 来解决“默认值 vs 当日记录”混淆：Today entry 会冻结当时使用的 observationId，因此默认值变化不会“改历史”。
+本仓库是一个“可溯源的营养数据账本”MVP：用 **JSONL 追加写**记录每条数值来源，用 **selection 指针 + event** 支持回滚/切换数据源；证据图片可选上传到 Cloudflare R2；并通过 **Today（摄入账本）** 解决“默认值 vs 当日记录”混淆：Today entry 会冻结当时使用的 observationId，因此默认值变化不会“改历史”。
+
+## 2026-09-14：Daily Nutrition v1 主线
+
+当前仓库已确定为营养系统的**唯一可执行主线**。不再从 `NutriFlow` / `NutriLogWX` / `health-workbench` 另起实现。
+
+优先目标不是“做大而全营养平台”，而是把真实日用闭环跑通：
+
+`吃了什么 → 快速录入 → 来源可见 → 可修正 → Today 冻结历史 → 可复用`
+
+新增 P0 工作流：
+
+```bash
+# 条码 → Open Food Facts → 归一化 → 账本
+npm run capture:barcode -- --barcode 3017620422003 --dry-run
+
+# 条码产品直接加入 Today（例：40g）
+npm run capture:barcode -- --barcode 3017620422003 --grams 40 --meal snack
+
+# 任意多模态流程产出的结构化 AI 粗估 → 账本 → Today
+npm run capture:ai -- --file examples/ai-estimate.example.json --dry-run
+npm run capture:ai -- --file examples/ai-estimate.example.json
+
+# 数据完整性审计
+npm run audit:data
+
+# 新增纯 Node 单元测试
+npm run test:unit
+```
+
+AI 餐照估算始终保存为 `method=ai_estimate`，不会伪装成已验证标签数据。
+
+主线材料：
+
+- `docs/analysis/2026-09-14-nutrition-canonical-decision.md`：仓库与产品主线裁决
+- `docs/research/2026-09-14-nutrition-data-sources-and-standards.md`：数据源、许可证、国标兼容与 provenance 规范
+- `docs/plan/2026-09-14-daily-nutrition-v1.md`：P0-P3 优先级与 7 天真实使用验收
 
 ## 运行
 
 ```bash
+npm install
 npm start
-# 或：node html/nutrition-ledger-mvp/server.mjs
+# 或：node server.mjs
 ```
 
-打开：`http://127.0.0.1:8789`（默认只监听 localhost；可用 `HOST/PORT` 环境变量调整）
+打开：`http://127.0.0.1:8789`（默认只监听 localhost；可用 `HOST/PORT` 环境变量调整）。
 
 ## 核心 UX（覆盖“多来源 + 用户自定义 + 可回滚 + 多录入方式 + 当日记录”）
 
@@ -65,33 +102,33 @@ npm start
 
 ### H. 导出 / 可迁移
 
-点「导出 JSON」会导出 foods、selections、ledger（observations/events/evidence）便于备份与迁移。
+点「导出 JSON」会导出 foods、selections、ledger（observations/events/evidence/intakes）便于备份与迁移。
 
 ## 数据落盘
 
-- `html/nutrition-ledger-mvp/data/ledger/observations.jsonl`：数值观测（不可变）
-- `html/nutrition-ledger-mvp/data/ledger/events.jsonl`：选择/回滚等事件（不可变）
-- `html/nutrition-ledger-mvp/data/ledger/evidence.jsonl`：证据记录（create/patch）
-- `html/nutrition-ledger-mvp/data/ledger/intakes.jsonl`：Today 摄入记录（add/patch/void，不可变）
-- `html/nutrition-ledger-mvp/data/state/foods.json`：食物列表快照
-- `html/nutrition-ledger-mvp/data/state/selections.json`：当前选用值快照
-- `html/nutrition-ledger-mvp/data/blobs/`：压缩预览图与缩略图
+- `data/ledger/observations.jsonl`：数值观测（不可变）
+- `data/ledger/events.jsonl`：选择/回滚等事件（不可变）
+- `data/ledger/evidence.jsonl`：证据记录（create/patch）
+- `data/ledger/intakes.jsonl`：Today 摄入记录（add/patch/void，不可变）
+- `data/state/foods.json`：食物列表快照
+- `data/state/selections.json`：当前选用值快照
+- `data/blobs/`：压缩预览图与缩略图
+
+`data/.gitignore` 默认忽略真实个人数据，只保留 `.gitignore` 本身。不要把个人饮食记录提交进 Git。
 
 ## 最小使用流程（推荐）
 
-1. 点「新建食物」（可填条码）
-2. （可选）在「证据图片」里上传营养成分表照片，保存（可选上传到 R2）
-3. 去 `Capture`：粘贴 OCR 文字 → 解析 → 校对 → 写入观测
-4. 去 `Today`：Quick Add 记录摄入（或在 Capture 里勾选“写入后立即加入 Today”）
-5. 去 `Foods`：需要时改值/回滚/切换来源
+1. 已吃过的食物：优先用 Today Quick Add
+2. 新包装食品：优先条码导入；数据库缺失/错误时回到标签/OCR 校对
+3. 熟食/餐照：只做结构化 AI 粗估，并明确保留不确定性
+4. 需要时在 `Foods` 改值/回滚/切换来源
+5. 每日结束运行 `npm run audit:data`
 
 ## R2（可选）
 
-此 MVP 内置：`html/nutrition-ledger-mvp/tools/upload-to-r2.js`（优先使用本地 `.env`）。
+本仓库内置：`tools/upload-to-r2.js`（优先使用本地 `.env`）。
 
-同时在你的 MINE 目录下也兼容：`8_Workflow/video/OLDLIFEASSONG/TOOLS/cartoon/upload-to-r2.js`（若本项目未配置/不存在）。
-
-在 `html/nutrition-ledger-mvp/.env`（或 `8_Workflow/video/OLDLIFEASSONG/.env`）配置（示例字段名以脚本为准）：
+在 `.env` 配置（示例字段名以脚本为准）：
 
 ```env
 CLOUDFLARE_ACCOUNT_ID=...
@@ -102,9 +139,14 @@ R2_PUBLIC_BASE_URL=https://...
 
 然后在网页里勾选“上传到 R2”即可。
 
-## Playwright e2e（可选）
+## 测试
 
 ```bash
+npm run test:unit
 npx playwright install chromium
 npm run test:e2e
 ```
+
+完整的 7 天真实使用验收与 P1/P2/P3 进入条件见：
+
+`docs/plan/2026-09-14-daily-nutrition-v1.md`
