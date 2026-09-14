@@ -90,15 +90,14 @@ async function main() {
   const observations = observationsFile.records;
   const evidence = evidenceFile.records;
   const intakes = intakesFile.records;
+  const intakeAdds = intakes.filter((item) => item?.type === "intake.add");
 
   const foodIds = new Set(foods.map((item) => item?.id).filter(Boolean));
   const observationIds = new Set(observations.map((item) => item?.id).filter(Boolean));
   const evidenceIds = new Set(
     evidence.filter((item) => item?.type === "evidence.create").map((item) => item?.id).filter(Boolean),
   );
-  const intakeAddIds = new Set(
-    intakes.filter((item) => item?.type === "intake.add").map((item) => item?.id).filter(Boolean),
-  );
+  const intakeAddIds = new Set(intakeAdds.map((item) => item?.id).filter(Boolean));
 
   for (const id of duplicates(foods.map((item) => item?.id))) {
     pushIssue(issues, "duplicate_food_id", `Duplicate food id ${id}`, { id });
@@ -106,12 +105,28 @@ async function main() {
   for (const id of duplicates(observations.map((item) => item?.id))) {
     pushIssue(issues, "duplicate_observation_id", `Duplicate observation id ${id}`, { id });
   }
-  for (const id of duplicates([...intakeAddIds])) {
+  for (const id of duplicates(intakeAdds.map((item) => item?.id))) {
     pushIssue(issues, "duplicate_intake_id", `Duplicate intake id ${id}`, { id });
   }
 
   for (const observation of observations) {
     if (!observation?.id) pushIssue(issues, "observation_missing_id", "Observation is missing id");
+    if (!String(observation?.source || "").trim()) {
+      pushIssue(
+        issues,
+        "observation_missing_source",
+        `Observation ${observation?.id || "(unknown)"} has no source`,
+        { observationId: observation?.id },
+      );
+    }
+    if (!String(observation?.method || "").trim()) {
+      pushIssue(
+        issues,
+        "observation_missing_method",
+        `Observation ${observation?.id || "(unknown)"} has no method`,
+        { observationId: observation?.id },
+      );
+    }
     if (observation?.foodId && !foodIds.has(observation.foodId)) {
       pushIssue(
         issues,
