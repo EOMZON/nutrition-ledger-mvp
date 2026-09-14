@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 import { readFile } from "node:fs/promises";
-import { LedgerClient } from "../lib/ledger-client.mjs";
 import {
+  buildIntakePayload,
   normalizeAiEstimate,
   toObservationPayloads,
-  todayLocalDate,
-} from "../lib/nutrition-normalize.mjs";
-import { fail, formatJson, mealNote, parseArgs } from "./_cli.mjs";
+} from "../src/application/capture-normalization.mjs";
+import { LedgerClient } from "../src/infrastructure/ledger-client.mjs";
+import { fail, formatJson, parseArgs } from "./_cli.mjs";
 
 const args = parseArgs();
 
@@ -83,14 +83,14 @@ async function main() {
 
   let intake = null;
   if (!args["no-intake"]) {
-    intake = await client.createIntake({
-      foodId: food.id,
-      consumedAt: args["consumed-at"] || new Date().toISOString(),
-      localDate: args.date || todayLocalDate(),
-      amount: normalized.amount,
-      basis: normalized.basis,
-      note: mealNote(normalized.meal, normalized.note),
-    });
+    intake = await client.createIntake(
+      buildIntakePayload({
+        foodId: food.id,
+        normalized,
+        consumedAt: args["consumed-at"] || "",
+        localDate: args.date || "",
+      }),
+    );
   }
 
   console.log(

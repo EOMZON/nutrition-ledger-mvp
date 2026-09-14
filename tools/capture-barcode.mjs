@@ -1,12 +1,21 @@
 #!/usr/bin/env node
-import { LedgerClient, filterNewObservations } from "../lib/ledger-client.mjs";
 import {
-  normalizeBarcode,
-  parseOpenFoodFactsPayload,
+  buildIntakePayload,
   toObservationPayloads,
-  todayLocalDate,
-} from "../lib/nutrition-normalize.mjs";
-import { fail, formatJson, mealNote, numberArg, parseArgs } from "./_cli.mjs";
+} from "../src/application/capture-normalization.mjs";
+import {
+  EXTENDED_NUTRIENT_IDS,
+  normalizeBarcode,
+} from "../src/domain/nutrients.mjs";
+import {
+  filterNewObservations,
+  LedgerClient,
+} from "../src/infrastructure/ledger-client.mjs";
+import {
+  fetchOpenFoodFacts,
+  parseOpenFoodFactsPayload,
+} from "../src/infrastructure/open-food-facts.mjs";
+import { fail, formatJson, numberArg, parseArgs } from "./_cli.mjs";
 
 const args = parseArgs();
 
@@ -28,46 +37,6 @@ Options:
 Environment:
   NUTRITION_USER_AGENT   Open Food Facts User-Agent. Use app/version + contact URL.
 `);
-}
-
-async function fetchOpenFoodFacts(barcode) {
-  const fields = [
-    "code",
-    "product_name",
-    "product_name_zh",
-    "product_name_en",
-    "brands",
-    "brands_tags",
-    "nutriments",
-    "last_modified_t",
-    "last_modified_datetime",
-  ].join(",");
-  const url = new URL(`https://world.openfoodfacts.org/api/v3/product/${encodeURIComponent(barcode)}`);
-  url.searchParams.set("fields", fields);
-  url.searchParams.set("lc", "zh");
-  url.searchParams.set("cc", "cn");
-
-  const userAgent =
-    process.env.NUTRITION_USER_AGENT ||
-    "NutritionLedger/0.2 (https://github.com/EOMZON/nutrition-ledger-mvp)";
-
-  const response = await fetch(url, {
-    headers: {
-      accept: "application/json",
-      "user-agent": userAgent,
-    },
-    redirect: "follow",
-  });
-
-  if (response.status === 404) throw new Error(`barcode ${barcode} not found in Open Food Facts`);
-  if (!response.ok) throw new Error(`Open Food Facts HTTP ${response.status}`);
-
-  const payload = await response.json();
-  if (!payload?.product) {
-    const status = payload?.status ? ` (${payload.status})` : "";
-    throw new Error(`Open Food Facts returned no product${status}`);
-  }
-  return payload;
 }
 
 async function main() {
@@ -100,14 +69,17 @@ async function main() {
   let intake = null;
 
   if (grams !== null) {
-    intake = await client.createIntake({
-      foodId: food.id,
-      consumedAt: args["consumed-at"] || new Date().toISOString(),
-      localDate: args.date || todayLocalDate(),
-      amount: { quantity: grams, unit: "g" },
-      basis: normalized.basis,
-      note: mealNote(args.meal, `Open Food Facts barcode ${barcode}`),
-    });
+    intake = await client.createIntake(
+      buildIntakePayload({
+        foodId: food.id,
+        normalized,
+        amount: { quantity: grams, unit: "g" },
+        consumedAt: args["consumed-at"] || "",
+        localDate: args.date || "",
+        meal: args.meal || "",
+        note: `Open Food Facts barcode ${barcode}`,
+      }),
+    );
   }
 
   console.log(
@@ -119,7 +91,7 @@ async function main() {
       skippedDuplicateCount: observationPayloads.length - pending.length,
       extendedNutrientsStored: normalized.nutrients
         .map((item) => item.nutrientId)
-        .filter((id) => ["saturated_fat_g", "sugars_g", "fiber_g"].includes(id)),
+        .filter((id) => EXTENDED_NUTRIENT_IDS.includes(id)),
       intake: intake
         ? {
             id: intake.id,

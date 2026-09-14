@@ -1,3 +1,5 @@
+import { formatMealNote } from "../src/domain/meals.mjs";
+
 export function parseArgs(argv = process.argv.slice(2)) {
   const out = { _: [] };
   for (let i = 0; i < argv.length; i += 1) {
@@ -35,12 +37,7 @@ export function formatJson(value) {
 }
 
 export function mealNote(meal, note = "") {
-  const parts = [];
-  const normalizedMeal = String(meal || "").trim();
-  if (normalizedMeal) parts.push(`meal:${normalizedMeal}`);
-  const normalizedNote = String(note || "").trim();
-  if (normalizedNote) parts.push(normalizedNote);
-  return parts.join(" | ");
+  return formatMealNote(meal, note);
 }
 
 export function fail(error) {

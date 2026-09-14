@@ -1,12 +1,18 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { filterNewObservations } from "../lib/ledger-client.mjs";
 import {
+  buildIntakePayload,
   normalizeAiEstimate,
-  normalizeBarcode,
-  parseOpenFoodFactsPayload,
   toObservationPayloads,
-} from "../lib/nutrition-normalize.mjs";
+} from "../src/application/capture-normalization.mjs";
+import { normalizeBarcode } from "../src/domain/nutrients.mjs";
+import {
+  filterNewObservations,
+} from "../src/infrastructure/ledger-client.mjs";
+import {
+  fetchOpenFoodFacts,
+  parseOpenFoodFactsPayload,
+} from "../src/infrastructure/open-food-facts.mjs";
 
 test("normalizeBarcode strips non-digits", () => {
   assert.equal(normalizeBarcode(" 690-123 456 "), "690123456");
@@ -52,6 +58,32 @@ test("Open Food Facts payload becomes traceable per-100g observations", () => {
   assert.match(observations[0].note, /sourceConfidence=community_database/);
 });
 
+test("Open Food Facts network adapter is independently injectable", async () => {
+  let requestedUrl = "";
+  let requestedUserAgent = "";
+  const fakeFetch = async (url, options) => {
+    requestedUrl = String(url);
+    requestedUserAgent = options.headers["user-agent"];
+    return {
+      ok: true,
+      status: 200,
+      async json() {
+        return { product: { code: "123", nutriments: { proteins_100g: 1 } } };
+      },
+    };
+  };
+
+  const payload = await fetchOpenFoodFacts("123", {
+    fetchImpl: fakeFetch,
+    userAgent: "NutritionTest/1.0 (test@example.invalid)",
+  });
+
+  assert.equal(payload.product.code, "123");
+  assert.match(requestedUrl, /api\/v3\/product\/123/);
+  assert.match(requestedUrl, /fields=/);
+  assert.equal(requestedUserAgent, "NutritionTest/1.0 (test@example.invalid)");
+});
+
 test("AI estimate remains explicitly approximate and per-serving", () => {
   const normalized = normalizeAiEstimate({
     label: "鸡胸藜麦沙拉",
@@ -76,8 +108,17 @@ test("AI estimate remains explicitly approximate and per-serving", () => {
   assert.equal(normalized.meal, "lunch");
   assert.match(normalized.note, /AI meal estimate/);
 
-  const observations = toObservationPayloads("food:custom:test", normalized);
+  const observations = toObservationPayloads("food:custom:meal", normalized);
   assert.match(observations[0].note, /sourceConfidence=0.68/);
+
+  const intake = buildIntakePayload({
+    foodId: "food:custom:meal",
+    normalized,
+    consumedAt: "2026-09-14T12:00:00+08:00",
+    localDate: "2026-09-14",
+  });
+  assert.equal(intake.localDate, "2026-09-14");
+  assert.match(intake.note, /^meal:lunch/);
 });
 
 test("duplicate source/value observations are skipped", () => {
