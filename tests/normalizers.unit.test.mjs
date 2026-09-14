@@ -49,6 +49,7 @@ test("Open Food Facts payload becomes traceable per-100g observations", () => {
   assert.equal(observations.length, 9);
   assert.equal(observations[0].sourceId, "off:6901234567890");
   assert.equal(observations[0].basis.kind, "per-100g");
+  assert.match(observations[0].note, /sourceConfidence=community_database/);
 });
 
 test("AI estimate remains explicitly approximate and per-serving", () => {
@@ -74,6 +75,9 @@ test("AI estimate remains explicitly approximate and per-serving", () => {
   assert.deepEqual(normalized.amount, { quantity: 1, unit: "serving" });
   assert.equal(normalized.meal, "lunch");
   assert.match(normalized.note, /AI meal estimate/);
+
+  const observations = toObservationPayloads("food:custom:test", normalized);
+  assert.match(observations[0].note, /sourceConfidence=0.68/);
 });
 
 test("duplicate source/value observations are skipped", () => {
