@@ -1,0 +1,17 @@
+{
+  "label": "鸡胸肉藜麦沙拉",
+  "meal": "lunch",
+  "source": "multimodal-provider",
+  "model": "model-version",
+  "requestId": "example-trace-id",
+  "confidence": 0.68,
+  "nutrients": {
+    "energy_kcal": 520,
+    "protein_g": 38,
+    "fat_g": 17,
+    "carb_g": 53,
+    "sodium_mg": 760,
+    "fiber_g": 8
+  },
+  "note": "Sanitized example only. Real meal estimates remain approximate."
+}
