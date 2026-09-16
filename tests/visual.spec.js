@@ -22,8 +22,11 @@ test("visual evidence: Today remains usable after architecture refactor", async 
     "每100g 能量 1680kJ 20% 蛋白质 12.5g 21% 脂肪 9.2g 15% 碳水化合物 61g 20% 钠 320mg 16%",
   );
   await page.getByRole("button", { name: "解析" }).click();
+  await expect(page.locator("#cap-parse-v")).toContainText("protein_g=12.5g");
   await page.locator("#cap-amt").fill("40");
-  await page.getByRole("button", { name: "写入观测" }).click();
+  await expect(page.locator("#cap-add-today")).toBeChecked();
+  await expect(page.locator("#cap-commit")).toBeEnabled();
+  await page.locator("#cap-commit").click();
 
   await expect(page).toHaveURL(/#foods$/);
   await expect(page.getByRole("heading", { name: "演示燕麦杯" })).toBeVisible();
