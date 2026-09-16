@@ -4,7 +4,17 @@
   "type": "module",
   "scripts": {
     "start": "node server.mjs",
-    "test:e2e": "playwright test"
+    "check": "node --check server.mjs && node --check tests/e2e.spec.js && node --check playwright.config.mjs",
+    "test:e2e": "playwright test",
+    "test:e2e:local": "E2E_BROWSER_CHANNEL=chrome playwright test",
+    "test:unit": "node --test tests/*.unit.test.mjs",
+    "test:visual": "E2E_BROWSER_CHANNEL=chrome playwright test tests/visual.spec.js",
+    "capture:barcode": "node tools/capture-barcode.mjs",
+    "capture:ai": "node tools/capture-ai-estimate.mjs",
+    "audit:data": "node tools/audit-ledger.mjs",
+    "view:today": "node tools/view-today.mjs",
+    "verify:daily": "npm run check && npm run test:unit && npm run test:e2e:local && npm run test:visual",
+    "build:vercel": "vercel build"
   },
   "devDependencies": {
     "@playwright/test": "^1.50.0"
