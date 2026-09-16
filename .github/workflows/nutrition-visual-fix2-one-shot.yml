@@ -1,0 +1,43 @@
+name: nutrition-visual-fix2-one-shot
+
+on:
+  pull_request:
+    branches:
+      - fix/nutrition-visual-wait-20260916
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    if: github.head_ref == 'codex/nutrition-visual-fix2-ci-verify-20260916'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - run: npm run test:unit
+      - run: npm run test:e2e:local
+      - run: npm run test:visual
+      - run: npm run capture:ai -- --file examples/ai-estimate.example.json --dry-run
+      - run: npm run capture:barcode -- --barcode 3017620422003 --dry-run
+      - run: |
+          tmpdir="$(mktemp -d)"
+          NUTRITION_LEDGER_DATA_DIR="$tmpdir" npm run audit:data
+      - run: test -s test-results/today-daily-v1.png
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nutrition-visual-fix2-evidence
+          path: |
+            test-results/today-daily-v1.png
+            playwright-report/
+            test-results/
+          if-no-files-found: warn
+          retention-days: 7
