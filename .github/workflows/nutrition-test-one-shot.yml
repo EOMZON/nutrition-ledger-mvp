@@ -1,0 +1,73 @@
+name: nutrition-test-one-shot
+
+on:
+  pull_request:
+    branches:
+      - test
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    if: github.head_ref == 'codex/nutrition-test-ci-verify-20260916'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout verification branch
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Environment
+        run: |
+          node -v
+          npm -v
+          google-chrome --version || true
+          git rev-parse HEAD
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Static checks
+        run: npm run check
+
+      - name: Unit tests
+        run: npm run test:unit
+
+      - name: Local browser E2E
+        run: npm run test:e2e:local
+
+      - name: Deterministic Today screenshot
+        run: npm run test:visual
+
+      - name: Structured AI dry-run
+        run: npm run capture:ai -- --file examples/ai-estimate.example.json --dry-run
+
+      - name: Live Open Food Facts barcode dry-run
+        run: npm run capture:barcode -- --barcode 3017620422003 --dry-run
+
+      - name: Isolated ledger audit
+        run: |
+          tmpdir="$(mktemp -d)"
+          NUTRITION_LEDGER_DATA_DIR="$tmpdir" npm run audit:data
+
+      - name: Verify screenshot exists
+        run: test -s test-results/today-daily-v1.png
+
+      - name: Upload visual evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nutrition-test-visual-evidence
+          path: |
+            test-results/today-daily-v1.png
+            playwright-report/
+            test-results/
+          if-no-files-found: warn
+          retention-days: 7
