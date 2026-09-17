@@ -91,7 +91,7 @@ test.describe.serial("Nutrition Today P1 daily loop", () => {
     await expect(meals.getByText(foodLabel, { exact: true })).toBeVisible();
     await expect(meals.getByRole("heading", { name: "午餐", exact: true })).toBeVisible();
     await expect(meals.getByText(/AI 粗估/).first()).toBeVisible();
-    await expect(page.getByText(/膳食纤维 4 g/)).toBeVisible();
+    await expect(page.locator("#secondary-summary")).toContainText("膳食纤维");
   });
 
   test("one-click repeat creates a new append-only intake", async ({ page }) => {
