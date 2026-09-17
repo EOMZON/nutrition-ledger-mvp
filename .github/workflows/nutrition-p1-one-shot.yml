@@ -1,0 +1,57 @@
+name: nutrition-p1-one-shot
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Environment
+        run: |
+          node -v
+          npm -v
+          google-chrome --version || true
+          git rev-parse HEAD
+      - name: Install dependencies
+        run: npm ci
+      - name: Static checks
+        run: npm run check
+      - name: Unit tests
+        run: npm run test:unit
+      - name: Full browser regression + P1
+        run: npm run test:e2e:local
+      - name: Visual evidence
+        run: npm run test:visual
+      - name: Structured AI dry-run
+        run: npm run capture:ai -- --file examples/ai-estimate.example.json --dry-run
+      - name: Live Open Food Facts barcode dry-run
+        run: npm run capture:barcode -- --barcode 3017620422003 --dry-run
+      - name: Isolated ledger audit
+        run: |
+          tmpdir="$(mktemp -d)"
+          NUTRITION_LEDGER_DATA_DIR="$tmpdir" npm run audit:data
+      - name: Verify screenshots exist
+        run: |
+          test -s test-results/today-daily-v1.png
+          test -s test-results/today-p1.png
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: nutrition-p1-evidence-v3
+          path: |
+            test-results/today-daily-v1.png
+            test-results/today-p1.png
+            playwright-report/
+            test-results/
+          if-no-files-found: warn
+          retention-days: 7
