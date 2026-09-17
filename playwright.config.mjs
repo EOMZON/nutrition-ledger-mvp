@@ -57,7 +57,7 @@ export default {
     : {
         command: `HOST=${host} PORT=${port} NUTRITION_LEDGER_DATA_DIR=${JSON.stringify(
           dataDir,
-        )} node server.mjs`,
+        )} node p1-server.mjs`,
         url: `http://${host}:${port}/api/health`,
         reuseExistingServer: false,
         timeout: 30_000,

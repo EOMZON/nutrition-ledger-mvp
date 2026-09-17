@@ -8,8 +8,14 @@ const readOnly = process.env.E2E_READ_ONLY === "1";
 let foodId = "";
 let evidencePath = "";
 
+function legacyPath(path = "/") {
+  if (path.startsWith("/#")) return `/?legacy=1${path.slice(1)}`;
+  if (path === "/") return "/?legacy=1";
+  return path;
+}
+
 async function gotoApp(page, path = "/") {
-  await page.goto(path);
+  await page.goto(legacyPath(path));
   await expect(page.locator("body")).toHaveAttribute("data-app-ready", "true");
 }
 

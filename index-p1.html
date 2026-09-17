@@ -1,0 +1,409 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f7faf7" />
+    <title>Nutrition Today</title>
+    <style>
+      :root {
+        --bg: #f7faf7;
+        --paper: #ffffff;
+        --ink: #111511;
+        --muted: #667067;
+        --line: #dfe7df;
+        --accent: #dff2df;
+        --accent-strong: #235c2b;
+        --warning: #7b4d00;
+        --radius: 18px;
+        --shadow: 0 12px 34px rgba(26, 46, 29, 0.06);
+        font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "PingFang SC",
+          "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+        color: var(--ink);
+        background: var(--bg);
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; background: var(--bg); color: var(--ink); }
+      button, input, select { font: inherit; }
+      button { cursor: pointer; }
+      a { color: inherit; text-decoration: none; }
+      .shell { width: min(1180px, calc(100% - 28px)); margin: 0 auto; }
+      header {
+        position: sticky; top: 0; z-index: 20; backdrop-filter: blur(18px);
+        background: rgba(247, 250, 247, 0.9); border-bottom: 1px solid rgba(223,231,223,.9);
+      }
+      .topbar { min-height: 68px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+      .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; letter-spacing: -.02em; }
+      .brand-mark { width: 28px; height: 28px; border-radius: 9px; background: var(--ink); display: grid; place-items:center; color: white; font-size: 13px; }
+      nav { display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
+      nav a { padding: 9px 12px; border: 1px solid transparent; border-radius: 999px; font-size: 13px; color: var(--muted); }
+      nav a.active { color: var(--ink); background: var(--paper); border-color: var(--line); }
+      main { padding: 38px 0 80px; }
+      .hero { display:flex; justify-content:space-between; gap:24px; align-items:flex-end; margin-bottom:28px; }
+      .eyebrow { font-size:11px; letter-spacing:.18em; text-transform:uppercase; color:var(--accent-strong); font-weight:700; }
+      h1 { margin:8px 0 8px; font-size:clamp(34px, 6vw, 68px); letter-spacing:-.055em; line-height:.96; font-weight:740; }
+      .hero p { margin:0; color:var(--muted); max-width:620px; line-height:1.65; }
+      .date-chip { border:1px solid var(--line); border-radius:999px; padding:10px 14px; background:var(--paper); color:var(--muted); white-space:nowrap; }
+      .summary { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:12px; }
+      .metric { background:var(--paper); border:1px solid var(--line); border-radius:var(--radius); padding:18px; box-shadow:var(--shadow); }
+      .metric .label { font-size:12px; color:var(--muted); margin-bottom:10px; }
+      .metric .value { font-size:30px; letter-spacing:-.04em; font-weight:720; }
+      .metric .unit { font-size:12px; color:var(--muted); margin-left:4px; font-weight:500; }
+      .secondary { display:flex; flex-wrap:wrap; gap:8px; margin:0 0 28px; }
+      .nutrient-pill { padding:8px 11px; border-radius:999px; background:rgba(255,255,255,.78); border:1px solid var(--line); color:var(--muted); font-size:12px; }
+      .layout { display:grid; grid-template-columns:minmax(0,1.5fr) minmax(300px,.8fr); gap:18px; align-items:start; }
+      .stack { display:grid; gap:18px; }
+      .card { background:var(--paper); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); overflow:hidden; }
+      .card-head { padding:18px 20px; border-bottom:1px solid var(--line); display:flex; justify-content:space-between; gap:14px; align-items:center; }
+      .card-title { font-size:15px; font-weight:720; letter-spacing:-.015em; }
+      .card-sub { font-size:12px; color:var(--muted); }
+      .card-body { padding:18px 20px; }
+      .meal { padding:0 0 18px; margin-bottom:18px; border-bottom:1px solid var(--line); }
+      .meal:last-child { border-bottom:0; padding-bottom:0; margin-bottom:0; }
+      .meal-head { display:flex; justify-content:space-between; gap:12px; align-items:baseline; margin-bottom:10px; }
+      .meal-head h3 { margin:0; font-size:18px; letter-spacing:-.025em; }
+      .entry { padding:13px 0; display:grid; grid-template-columns:minmax(0,1fr) auto; gap:14px; border-top:1px dashed #e7ece7; }
+      .entry:first-of-type { border-top:0; }
+      .entry-title { font-weight:680; margin-bottom:4px; }
+      .entry-meta { display:flex; flex-wrap:wrap; gap:6px; align-items:center; color:var(--muted); font-size:12px; }
+      .badge { display:inline-flex; align-items:center; min-height:24px; padding:3px 8px; border-radius:999px; background:#f4f7f4; border:1px solid var(--line); font-size:11px; color:var(--muted); }
+      .badge.approx { background:#fff5df; border-color:#ead8ad; color:var(--warning); font-weight:700; }
+      .entry-nutrition { text-align:right; white-space:nowrap; }
+      .entry-nutrition strong { display:block; font-size:17px; }
+      .entry-nutrition span { font-size:11px; color:var(--muted); }
+      .shortcut-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:9px; }
+      .shortcut { text-align:left; padding:12px; border:1px solid var(--line); border-radius:14px; background:#fbfdfb; transition:.15s ease; }
+      .shortcut:hover { border-color:#b9cbb9; transform:translateY(-1px); }
+      .shortcut strong { display:block; margin-bottom:4px; }
+      .shortcut span { color:var(--muted); font-size:11px; }
+      .form { display:grid; gap:12px; }
+      .field { display:grid; gap:6px; }
+      .field label { font-size:11px; color:var(--muted); font-weight:650; }
+      input, select { width:100%; border:1px solid var(--line); background:#fbfdfb; border-radius:12px; padding:11px 12px; color:var(--ink); outline:none; }
+      input:focus, select:focus { border-color:#8db493; box-shadow:0 0 0 3px rgba(141,180,147,.14); }
+      .row { display:grid; grid-template-columns:1fr 1fr; gap:9px; }
+      .primary, .secondary-btn { min-height:42px; padding:10px 13px; border-radius:12px; border:1px solid var(--ink); font-weight:700; }
+      .primary { background:var(--ink); color:white; }
+      .secondary-btn { background:var(--paper); color:var(--ink); border-color:var(--line); }
+      .primary:disabled, .secondary-btn:disabled { opacity:.45; cursor:not-allowed; }
+      .barcode-preview { margin-top:12px; padding:13px; border-radius:14px; background:var(--accent); display:none; }
+      .barcode-preview.visible { display:block; }
+      .barcode-preview h4 { margin:0 0 5px; }
+      .barcode-preview p { margin:0; color:#48604b; font-size:12px; line-height:1.55; }
+      .empty { padding:22px 0; color:var(--muted); font-size:13px; }
+      .status { position:fixed; right:18px; bottom:18px; max-width:min(420px,calc(100vw - 36px)); padding:12px 15px; border-radius:14px; background:var(--ink); color:white; font-size:12px; box-shadow:0 18px 60px rgba(0,0,0,.18); opacity:0; pointer-events:none; transform:translateY(8px); transition:.18s ease; z-index:40; }
+      .status.show { opacity:1; transform:none; }
+      .status.error { background:#6d241f; }
+      @media (max-width: 820px) {
+        .summary { grid-template-columns:repeat(2,1fr); }
+        .layout { grid-template-columns:1fr; }
+        .hero { align-items:flex-start; flex-direction:column; }
+        .shortcut-grid { grid-template-columns:1fr; }
+      }
+      @media (max-width: 540px) {
+        .shell { width:min(100% - 20px,1180px); }
+        .topbar { align-items:flex-start; padding:12px 0; }
+        nav { gap:4px; }
+        nav a { padding:7px 8px; font-size:11px; }
+        main { padding-top:24px; }
+        .summary { gap:8px; }
+        .metric { padding:14px; border-radius:15px; }
+        .metric .value { font-size:25px; }
+        .card-head, .card-body { padding-left:15px; padding-right:15px; }
+        .entry { grid-template-columns:1fr; }
+        .entry-nutrition { text-align:left; }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="shell topbar">
+        <a class="brand" href="/"><span class="brand-mark">N</span><span>Nutrition Today</span></a>
+        <nav>
+          <a class="active" href="/">Today</a>
+          <a href="/?legacy=1#capture">Capture</a>
+          <a href="/?legacy=1#foods">Foods</a>
+          <a href="/?legacy=1#evidence">Evidence</a>
+          <a href="/?legacy=1">完整工作台</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="shell">
+      <section class="hero">
+        <div>
+          <div class="eyebrow">Daily nutrition · traceable by design</div>
+          <h1>今天吃了什么？</h1>
+          <p>先把记录做到足够快。来源、餐次和历史快照都留在账本里；需要深度校对时再进入完整工作台。</p>
+        </div>
+        <div class="date-chip" id="today-date">—</div>
+      </section>
+
+      <section class="summary" id="summary"></section>
+      <section class="secondary" id="secondary-summary"></section>
+
+      <div class="layout">
+        <div class="stack">
+          <section class="card">
+            <div class="card-head">
+              <div><div class="card-title">今日记录</div><div class="card-sub" id="today-count">—</div></div>
+              <a class="secondary-btn" href="/?legacy=1#capture" style="display:inline-flex;align-items:center">完整录入</a>
+            </div>
+            <div class="card-body" id="meal-groups"><div class="empty">正在读取 Today…</div></div>
+          </section>
+
+          <section class="card">
+            <div class="card-head"><div><div class="card-title">快速重复</div><div class="card-sub">从历史 intake 派生，不建立第二份收藏数据库</div></div></div>
+            <div class="card-body">
+              <div class="card-sub" style="margin-bottom:8px">最近吃过</div>
+              <div class="shortcut-grid" id="recent-foods"></div>
+              <div class="card-sub" style="margin:18px 0 8px">近 30 天常用</div>
+              <div class="shortcut-grid" id="common-foods"></div>
+            </div>
+          </section>
+        </div>
+
+        <aside class="stack">
+          <section class="card">
+            <div class="card-head"><div><div class="card-title">已有食物 · 快速记</div><div class="card-sub">适合已经录过营养信息的食物</div></div></div>
+            <div class="card-body">
+              <form class="form" id="quick-add-form">
+                <div class="field"><label for="quick-food">食物</label><select id="quick-food" required></select></div>
+                <div class="row">
+                  <div class="field"><label for="quick-amount">份量</label><input id="quick-amount" type="number" min="0.1" step="0.1" value="100" required /></div>
+                  <div class="field"><label for="quick-meal">餐次</label><select id="quick-meal"><option value="breakfast">早餐</option><option value="lunch">午餐</option><option value="dinner">晚餐</option><option value="snack">加餐</option><option value="other">其他</option></select></div>
+                </div>
+                <button class="primary" type="submit">加入 Today</button>
+              </form>
+            </div>
+          </section>
+
+          <section class="card">
+            <div class="card-head"><div><div class="card-title">包装食品 · 条码</div><div class="card-sub">Open Food Facts 社区数据库；精度重要时仍以包装标签为准</div></div></div>
+            <div class="card-body">
+              <div class="form">
+                <div class="field"><label for="barcode">条码</label><input id="barcode" inputmode="numeric" placeholder="输入或粘贴条码" /></div>
+                <div class="row">
+                  <div class="field"><label for="barcode-amount">食用量 g</label><input id="barcode-amount" type="number" min="0.1" step="0.1" value="100" /></div>
+                  <div class="field"><label for="barcode-meal">餐次</label><select id="barcode-meal"><option value="breakfast">早餐</option><option value="lunch">午餐</option><option value="dinner">晚餐</option><option value="snack">加餐</option><option value="other">其他</option></select></div>
+                </div>
+                <button class="secondary-btn" id="barcode-lookup" type="button">查询条码</button>
+                <div class="barcode-preview" id="barcode-preview"></div>
+                <button class="primary" id="barcode-confirm" type="button" disabled>确认并加入 Today</button>
+              </div>
+            </div>
+          </section>
+        </aside>
+      </div>
+    </main>
+
+    <div class="status" id="status"></div>
+
+    <script>
+      const $ = (selector) => document.querySelector(selector);
+      const state = { daily: null, barcodeCandidate: null };
+
+      function localDate() {
+        const now = new Date();
+        return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+      }
+
+      function currentMeal() {
+        const hour = new Date().getHours();
+        if (hour < 10) return "breakfast";
+        if (hour < 15) return "lunch";
+        if (hour < 21) return "dinner";
+        return "snack";
+      }
+
+      async function api(url, options = {}) {
+        const response = await fetch(url, {
+          ...options,
+          headers: { "content-type": "application/json", ...(options.headers || {}) },
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload.error || `HTTP ${response.status}`);
+        return payload;
+      }
+
+      function notify(message, isError = false) {
+        const node = $("#status");
+        node.textContent = message;
+        node.className = `status show${isError ? " error" : ""}`;
+        clearTimeout(notify.timer);
+        notify.timer = setTimeout(() => { node.className = "status"; }, 3000);
+      }
+
+      function fmt(value, digits = 1) {
+        const number = Number(value);
+        if (!Number.isFinite(number)) return "0";
+        return number.toFixed(digits).replace(/\.0$/, "");
+      }
+
+      function renderSummary(daily) {
+        const byId = Object.fromEntries((daily.nutrientSummary || []).map((item) => [item.id, item]));
+        const primary = [
+          ["energy_kcal", "热量", 0],
+          ["protein_g", "蛋白质", 1],
+          ["fat_g", "脂肪", 1],
+          ["carb_g", "碳水", 1],
+        ];
+        $("#summary").innerHTML = primary.map(([id, label, digits]) => {
+          const item = byId[id] || { value: 0, unit: id === "energy_kcal" ? "kcal" : "g" };
+          return `<article class="metric"><div class="label">${label}</div><div class="value">${fmt(item.value, digits)}<span class="unit">${item.unit}</span></div></article>`;
+        }).join("");
+        const secondaryIds = ["saturated_fat_g", "sugars_g", "fiber_g", "sodium_mg"];
+        $("#secondary-summary").innerHTML = secondaryIds.map((id) => {
+          const item = byId[id];
+          if (!item) return "";
+          return `<span class="nutrient-pill">${item.label} ${fmt(item.value, 1)} ${item.unit}</span>`;
+        }).join("");
+      }
+
+      function stripMealToken(note) {
+        return String(note || "").split("|").map((part) => part.trim()).filter((part) => part && !/^meal:[a-z-]+$/i.test(part)).join(" · ");
+      }
+
+      function renderMeals(daily) {
+        const root = $("#meal-groups");
+        $("#today-count").textContent = `${daily.entryCount || 0} 条记录${daily.hasApproximateData ? ` · ${daily.approximateEntryCount} 条含粗估` : ""}`;
+        if (!(daily.groups || []).length) {
+          root.innerHTML = `<div class="empty">今天还没有记录。可以从右侧已有食物快速添加，或直接重复最近一餐。</div>`;
+          return;
+        }
+        root.innerHTML = daily.groups.map((group) => `
+          <section class="meal">
+            <div class="meal-head"><h3>${group.label}</h3><span class="card-sub">${group.entries.length} 项</span></div>
+            ${group.entries.map((entry) => {
+              const sourceBadges = [...(entry.provenance?.methodLabels || []), ...(entry.provenance?.sources || [])]
+                .filter(Boolean).slice(0, 3).map((label) => `<span class="badge">${label}</span>`).join("");
+              const note = stripMealToken(entry.note);
+              return `<article class="entry">
+                <div>
+                  <div class="entry-title">${entry.title}</div>
+                  <div class="entry-meta"><span>${entry.amountLabel || ""}</span>${entry.provenance?.approximate ? `<span class="badge approx">AI 粗估 · 约</span>` : ""}${sourceBadges}${note ? `<span>${note}</span>` : ""}</div>
+                </div>
+                <div class="entry-nutrition"><strong>${entry.energyKcal ?? 0} kcal</strong><span>P ${entry.macros?.proteinG ?? 0} · F ${entry.macros?.fatG ?? 0} · C ${entry.macros?.carbG ?? 0}</span></div>
+              </article>`;
+            }).join("")}
+          </section>`).join("");
+      }
+
+      function shortcutButton(item) {
+        const amount = item.amount?.quantity ? `${fmt(item.amount.quantity)}${item.amount.unit || ""}` : "上次份量";
+        return `<button class="shortcut" type="button" data-repeat="${item.lastIntakeId}"><strong>${item.title}</strong><span>${item.mealLabel} · ${amount}${item.count > 1 ? ` · 近 30 天 ${item.count} 次` : ""}</span></button>`;
+      }
+
+      function renderShortcuts(daily) {
+        $("#recent-foods").innerHTML = (daily.recentFoods || []).length ? daily.recentFoods.map(shortcutButton).join("") : `<div class="empty">暂无历史记录</div>`;
+        $("#common-foods").innerHTML = (daily.commonFoods || []).length ? daily.commonFoods.map(shortcutButton).join("") : `<div class="empty">连续使用后会自动出现</div>`;
+        document.querySelectorAll("[data-repeat]").forEach((button) => {
+          button.addEventListener("click", async () => {
+            button.disabled = true;
+            try {
+              await api("/api/p1/intakes/repeat", { method: "POST", body: JSON.stringify({ sourceIntakeId: button.dataset.repeat }) });
+              notify("已按上次份量记录一份新的 intake");
+              await loadToday();
+            } catch (error) {
+              notify(error.message, true);
+            } finally {
+              button.disabled = false;
+            }
+          });
+        });
+      }
+
+      function renderFoodOptions(daily) {
+        const select = $("#quick-food");
+        select.innerHTML = `<option value="">选择已有食物</option>` + (daily.foodOptions || []).map((food) => `<option value="${food.id}">${food.label}${food.brand ? ` · ${food.brand}` : ""}</option>`).join("");
+      }
+
+      async function loadToday() {
+        const date = localDate();
+        const daily = await api(`/api/p1/today?date=${encodeURIComponent(date)}`);
+        state.daily = daily;
+        $("#today-date").textContent = daily.date || date;
+        renderSummary(daily);
+        renderMeals(daily);
+        renderShortcuts(daily);
+        renderFoodOptions(daily);
+      }
+
+      $("#quick-add-form").addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const foodId = $("#quick-food").value;
+        if (!foodId) return notify("先选择一个食物", true);
+        const button = event.submitter;
+        button.disabled = true;
+        try {
+          await api("/api/p1/intakes", {
+            method: "POST",
+            body: JSON.stringify({
+              foodId,
+              amount: { quantity: Number($("#quick-amount").value) },
+              meal: $("#quick-meal").value,
+            }),
+          });
+          notify("已加入 Today");
+          await loadToday();
+        } catch (error) {
+          notify(error.message, true);
+        } finally {
+          button.disabled = false;
+        }
+      });
+
+      $("#barcode-lookup").addEventListener("click", async () => {
+        const barcode = $("#barcode").value.trim();
+        if (!barcode) return notify("请输入条码", true);
+        const button = $("#barcode-lookup");
+        button.disabled = true;
+        try {
+          const result = await api(`/api/p1/barcode?barcode=${encodeURIComponent(barcode)}`);
+          state.barcodeCandidate = result.candidate;
+          const candidate = result.candidate;
+          const nutrientText = (candidate.nutrients || []).slice(0, 6).map((item) => `${item.nutrientId} ${item.value}${item.unit}`).join(" · ");
+          const preview = $("#barcode-preview");
+          preview.innerHTML = `<h4>${candidate.food.label}</h4><p>${candidate.food.brand || "未知品牌"}<br>${nutrientText}<br>来源：Open Food Facts · 社区数据库</p>`;
+          preview.classList.add("visible");
+          $("#barcode-confirm").disabled = false;
+        } catch (error) {
+          state.barcodeCandidate = null;
+          $("#barcode-confirm").disabled = true;
+          notify(error.message, true);
+        } finally {
+          button.disabled = false;
+        }
+      });
+
+      $("#barcode-confirm").addEventListener("click", async () => {
+        if (!state.barcodeCandidate) return;
+        const button = $("#barcode-confirm");
+        button.disabled = true;
+        try {
+          const result = await api("/api/p1/barcode/confirm", {
+            method: "POST",
+            body: JSON.stringify({
+              barcode: state.barcodeCandidate.food.barcode,
+              amount: { quantity: Number($("#barcode-amount").value), unit: "g" },
+              meal: $("#barcode-meal").value,
+              addToday: true,
+            }),
+          });
+          notify(`已加入 Today · 新增 ${result.importedObservations} 条营养观测`);
+          state.barcodeCandidate = null;
+          $("#barcode-confirm").disabled = true;
+          $("#barcode-preview").classList.remove("visible");
+          await loadToday();
+        } catch (error) {
+          notify(error.message, true);
+        } finally {
+          button.disabled = false;
+        }
+      });
+
+      document.querySelectorAll("#quick-meal, #barcode-meal").forEach((select) => { select.value = currentMeal(); });
+      loadToday().catch((error) => notify(error.message, true));
+    </script>
+  </body>
+</html>
