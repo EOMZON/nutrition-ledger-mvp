@@ -117,7 +117,7 @@ test.describe.serial("Nutrition Today P1 daily loop", () => {
     await page.locator("#quick-food").selectOption(foodId);
     await page.locator("#quick-amount").fill("25");
     await page.locator("#quick-meal").selectOption("dinner");
-    await page.getByRole("button", { name: "加入 Today" }).click();
+    await page.getByRole("button", { name: "加入 Today", exact: true }).click();
     await expect(page.locator("#meal-groups").getByRole("heading", { name: "晚餐", exact: true })).toBeVisible();
     const today = await browserJson(page, "/api/p1/today");
     const dinner = today.body.groups.find((group) => group.meal === "dinner");
