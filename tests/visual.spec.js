@@ -11,13 +11,15 @@ async function gotoApp(page, path) {
 
 test("visual evidence: legacy Today remains usable after P1 strangler", async ({ page }) => {
   page.on("dialog", (dialog) => dialog.accept());
+  const visualBarcode = `69${String(Date.now()).slice(-11)}`;
 
   await gotoApp(page, "/#capture");
   await page.getByRole("button", { name: "新建食物" }).first().click();
   await page.locator("#nf-label").fill("演示燕麦杯");
-  await page.locator("#nf-barcode").fill("6901234567890");
+  await page.locator("#nf-barcode").fill(visualBarcode);
   await page.locator("#nf-brand").fill("Demo");
   await page.getByRole("button", { name: "创建" }).click();
+  await expect(page.locator("#cap-food")).toHaveValue(`food:barcode:${visualBarcode}`);
 
   await page.locator("#cap-text").fill(
     "每100g 能量 1680kJ 20% 蛋白质 12.5g 21% 脂肪 9.2g 15% 碳水化合物 61g 20% 钠 320mg 16%",
