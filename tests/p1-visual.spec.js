@@ -21,9 +21,10 @@ async function browserJson(page, url, { method = "GET", body } = {}) {
 test("visual evidence: Today P1 is a usable daily entry surface", async ({ page }) => {
   await page.goto("/");
   const suffix = String(Date.now()).slice(-8);
+  const label = `视觉验收酸奶 ${suffix}`;
   const created = await browserJson(page, "/api/foods", {
     method: "POST",
-    body: { label: `视觉验收酸奶 ${suffix}`, barcode: `79${suffix}001`, brand: "Visual P1" },
+    body: { label, barcode: `79${suffix}001`, brand: "Visual P1" },
   });
   const foodId = created.body.food.id;
   await browserJson(page, "/api/observations/batch", {
@@ -56,8 +57,9 @@ test("visual evidence: Today P1 is a usable daily entry surface", async ({ page 
 
   await page.reload();
   await expect(page.getByRole("heading", { name: "今天吃了什么？" })).toBeVisible();
-  await expect(page.getByText(`视觉验收酸奶 ${suffix}`, { exact: true })).toBeVisible();
-  await expect(page.getByText("早餐", { exact: true })).toBeVisible();
+  const meals = page.locator("#meal-groups");
+  await expect(meals.getByText(label, { exact: true })).toBeVisible();
+  await expect(meals.getByRole("heading", { name: "早餐", exact: true })).toBeVisible();
   await expect(page.getByText(/膳食纤维 3 g/)).toBeVisible();
 
   await mkdir("test-results", { recursive: true });
