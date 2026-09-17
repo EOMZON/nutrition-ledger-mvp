@@ -87,9 +87,10 @@ test.describe.serial("Nutrition Today P1 daily loop", () => {
     firstIntakeId = intakeResponse.body.intake.id;
 
     await page.reload();
-    await expect(page.getByText(foodLabel, { exact: true })).toBeVisible();
-    await expect(page.getByText("午餐", { exact: true })).toBeVisible();
-    await expect(page.getByText(/AI 粗估/).first()).toBeVisible();
+    const meals = page.locator("#meal-groups");
+    await expect(meals.getByText(foodLabel, { exact: true })).toBeVisible();
+    await expect(meals.getByRole("heading", { name: "午餐", exact: true })).toBeVisible();
+    await expect(meals.getByText(/AI 粗估/).first()).toBeVisible();
     await expect(page.getByText(/膳食纤维 4 g/)).toBeVisible();
   });
 
@@ -117,7 +118,7 @@ test.describe.serial("Nutrition Today P1 daily loop", () => {
     await page.locator("#quick-amount").fill("25");
     await page.locator("#quick-meal").selectOption("dinner");
     await page.getByRole("button", { name: "加入 Today" }).click();
-    await expect(page.getByText("晚餐", { exact: true })).toBeVisible();
+    await expect(page.locator("#meal-groups").getByRole("heading", { name: "晚餐", exact: true })).toBeVisible();
     const today = await browserJson(page, "/api/p1/today");
     const dinner = today.body.groups.find((group) => group.meal === "dinner");
     expect(dinner?.entries.some((entry) => entry.foodId === foodId)).toBeTruthy();
