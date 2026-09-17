@@ -4,11 +4,12 @@ import { test, expect } from "@playwright/test";
 test.use({ viewport: { width: 1440, height: 1000 } });
 
 async function gotoApp(page, path) {
-  await page.goto(path);
+  const target = path.startsWith("/#") ? `/?legacy=1${path.slice(1)}` : path;
+  await page.goto(target);
   await expect(page.locator("body")).toHaveAttribute("data-app-ready", "true");
 }
 
-test("visual evidence: Today remains usable after architecture refactor", async ({ page }) => {
+test("visual evidence: legacy Today remains usable after P1 strangler", async ({ page }) => {
   page.on("dialog", (dialog) => dialog.accept());
 
   await gotoApp(page, "/#capture");
