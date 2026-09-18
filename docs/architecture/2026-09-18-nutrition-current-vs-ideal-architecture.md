@@ -278,3 +278,25 @@ old CONSUMER_VERIFIED
 
 参考：
 https://github.com/EOMZON/codex-skills-private/issues/29
+
+
+## 7. #28 verified candidate
+
+Correction architecture 已有独立 Draft candidate：
+
+https://github.com/EOMZON/nutrition-ledger-mvp/pull/29
+
+候选已验证：
+- unit 14/14；
+- browser 13/13；
+- visual 2/2；
+- selected invalidated observation 显式 unresolved；
+- History UI 保留 invalidated + reason；
+- audit 区分 fatal dangling invalidation 与 invalidated-selection warning；
+- frozen intake 不回写；
+- 真实 private ledger 未修改。
+
+Exact-SHA：
+https://github.com/EOMZON/nutrition-ledger-mvp/actions/runs/35312188955
+
+该 candidate **尚未进入 test**。当前 dogfood baseline 继续固定在 `test@244f4c1...`。
