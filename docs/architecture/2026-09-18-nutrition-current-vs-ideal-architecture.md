@@ -1,7 +1,21 @@
 # Nutrition 当前架构 vs 理想架构
 
-日期：2026-09-18  
+日期：2026-09-18 晚间  
 状态：docs-only architecture reference，不构成 runtime 变更。
+
+## 0. 当前状态
+
+```text
+main = 298cd1f1e46a62d1cd83efca79be73edbadd6c32
+test = 244f4c188993e0633833a0b9fd936afedb29605c
+canonical consumer = VERIFIED
+Day 1 = PASS
+Day 2 = PASS
+Day 3–7 = PENDING
+#28 correction = CANDIDATE_VERIFIED / INTEGRATION_DEFERRED
+#26 Coverage = BLOCKED ON #18 + #28
+Production = NOT PROMOTED
+```
 
 ## 1. 当前已实现架构
 
@@ -53,20 +67,16 @@ flowchart TB
     Evidence --> Obs
 
     Obs --> Sel --> Intake
-
     Nutrient --> Intake
     Meal --> Intake
     Prov --> Intake
     History --> Daily
-
     Intake --> Daily
     Client --> Daily
-
     Daily --> VM
     Repeat --> VM
     BarcodeFlow --> VM
     VM --> Today
-
     Obs --> Legacy
     Intake --> Legacy
 ```
@@ -89,51 +99,58 @@ UI 禁止：
 - 把缺失值默认为 0；
 - 把 AI estimate 当 verified。
 
-## 3. 当前已知缺口：Correction
+## 3. Correction：从架构缺口推进到 verified candidate
 
-当前 append-only 模型能表达：
+历史 parser bug 暴露的缺口：
 
 ```text
 observation.add
-selection
-intake.add
-intake.patch
-intake.void
+→ observation.invalidate
+→ effective resolver
 ```
 
-但历史 parser bug 暴露出还缺：
+当前已经有 verified Draft candidate：
 
-```text
-observation.invalidate
-或
-observation.supersede
-```
+https://github.com/EOMZON/nutrition-ledger-mvp/pull/29
 
-理想 correction：
+Candidate：
+`60b8dc0fbc7056b6b359f05149c4cf0c71e84fe9`
 
 ```mermaid
 flowchart LR
-    O["observation.add<br/>历史值"]
-    I["observation.invalidate<br/>reason + evidence"]
+    O["observation.add<br/>历史原始值"]
+    I["observation.invalidate<br/>reason + evidenceRef"]
     Resolver["Effective Observation Resolver"]
+    Selection["Selection State"]
     Export["Export / Audit"]
-    Today["Today / Future Coverage"]
+    History["Frozen Historical Intake"]
+    Future["Future Coverage"]
 
-    O --> I
     O --> Resolver
     I --> Resolver
+    Resolver --> Selection
     O --> Export
     I --> Export
-    Resolver --> Today
+    O --> History
+    Resolver --> Future
 ```
 
-要求：
-- 原始 observation 永远保留；
-- invalidation 也是 append-only；
-- effective resolver 排除 invalidated observation；
-- audit/export 保留完整链；
-- 历史 frozen intake 不回写；
-- 后续 Coverage 不消费 known-invalid observation。
+已验证语义：
+- 原始 observation 永久保留；
+- invalidation append-only；
+- invalidated observation 不参与默认选择；
+- selected invalidated 明确返回 unresolved；
+- 不静默 fallback；
+- History 显示 invalidated + reason；
+- frozen historical intake 不回写；
+- audit 可发现 dangling invalidation / invalidated selection。
+
+当前仍未：
+- merge test；
+- 修改真实 private ledger；
+- 对真实 3 条 known-invalid NRV 执行 correction。
+
+原因：7-day dogfood 要保持稳定 runtime baseline。
 
 ## 4. 理想最终产品架构
 
@@ -182,24 +199,18 @@ flowchart TB
     E2 --> O
     E3 --> O
     E4 --> O
-
-    O --> Inv
     O --> S
     Inv --> S
     S --> I
-
     I --> Agg
     I --> Recent
     Agg --> T
-
     UserTarget --> CS
     RefTarget --> CS
     Agg --> CS
-
     CS --> Covered
     CS --> Remaining
     CS --> Unknown
-
     Covered --> Summary
     Remaining --> Rows
     Unknown --> UnknownNotice
@@ -213,23 +224,28 @@ UNKNOWN != 0
 UNKNOWN != REMAINING
 invalidated observation != deleted history
 target change != rewrite historical intake
+AI estimate != verified truth
 ```
 
-## 5. 本地运行理想架构
+## 5. 当前 → 理想差距
 
-当前 canonical 已收口为真实私人 ledger checkout：
+| 层 | 当前 | 理想 | 下一 Gate |
+|---|---|---|---|
+| Capture | 基本完成 | 日用低摩擦 | Day3–7 |
+| Provenance | 完成 | 全链可解释 | 继续 dogfood |
+| Correction | verified candidate | integrated + real correction | Day7 后 |
+| Daily | Day1/2 PASS | 7-day natural use | #18 |
+| Coverage | 未实现 | Covered/Remaining/Unknown | #18 + #28 |
+| Beta | 未开始 | 5–10 用户 | Coverage 后 |
+| Production | 暂停 | 受控上线 | #59 |
 
-```text
-/Users/zon/Desktop/MINE/html/nutrition-ledger-mvp
-```
-
-建议未来把代码身份与数据身份显式区分：
+## 6. 本地运行身份
 
 ```mermaid
 flowchart TD
     Code["Canonical Code Checkout"]
-    Target["Exact test/main SHA"]
-    Env["NUTRITION_LEDGER_DATA_DIR"]
+    Target["Exact test SHA"]
+    Env["Data identity / runtime config"]
     Data["Canonical Private Data Root"]
     Ledger["ledger / state"]
     Blob["blobs / evidence"]
@@ -243,9 +259,15 @@ flowchart TD
     Data --> Backup
 ```
 
-7-day dogfood 中不移动 private data root；等 dogfood 完成后再决定是否把 data root 从 repo checkout 物理解耦。
+Canonical：
 
-## 6. Worktree / clone 治理补充
+```text
+/Users/zon/Desktop/MINE/html/nutrition-ledger-mvp
+```
+
+7-day 期间不移动 private data root。
+
+## 7. Worktree / Merge Synchronization
 
 必须区分：
 
@@ -256,47 +278,17 @@ git worktree count
 != private data continuity
 ```
 
-后续治理建议至少记录：
+以及：
 
 ```text
-codeCheckout
-gitCommonDir
-runtimeConsumer
-privateDataRoot
-targetSHA
-consumerReadbackAt
+SOURCE_SAVED
+!= MERGED
+!= SEMANTICALLY_RECONCILED
+!= TARGET_VERIFIED
+!= CONSUMER_UPDATED
 ```
 
-每次 target SHA 移动：
-
-```text
-old CONSUMER_VERIFIED
-→ TARGET_MOVED_REVERIFY_REQUIRED
-→ live consumer readback
-→ CONSUMER_VERIFIED
-```
+本轮已经真实证明：只有 PR merged / target CI PASS 不足以证明 canonical consumer 已更新；#24/#25 的 live readback 才完成最终闭环。
 
 参考：
 https://github.com/EOMZON/codex-skills-private/issues/29
-
-
-## 7. #28 verified candidate
-
-Correction architecture 已有独立 Draft candidate：
-
-https://github.com/EOMZON/nutrition-ledger-mvp/pull/29
-
-候选已验证：
-- unit 14/14；
-- browser 13/13；
-- visual 2/2；
-- selected invalidated observation 显式 unresolved；
-- History UI 保留 invalidated + reason；
-- audit 区分 fatal dangling invalidation 与 invalidated-selection warning；
-- frozen intake 不回写；
-- 真实 private ledger 未修改。
-
-Exact-SHA：
-https://github.com/EOMZON/nutrition-ledger-mvp/actions/runs/35312188955
-
-该 candidate **尚未进入 test**。当前 dogfood baseline 继续固定在 `test@244f4c1...`。
