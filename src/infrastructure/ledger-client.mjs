@@ -58,6 +58,14 @@ export class LedgerClient {
     return result.observations || [];
   }
 
+  async invalidateObservation({ observationId, reason, evidenceRef = "" }) {
+    const result = await this.request("/api/observations/invalidate", {
+      method: "POST",
+      body: JSON.stringify({ observationId, reason, evidenceRef }),
+    });
+    return result.event;
+  }
+
   async createIntake(intake) {
     const result = await this.request("/api/intakes", {
       method: "POST",
