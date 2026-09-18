@@ -45,6 +45,25 @@ https://github.com/EOMZON/nutrition-ledger-mvp/issues/28
 Coverage future P1：
 https://github.com/EOMZON/nutrition-ledger-mvp/issues/26
 
+## 5.1 #28 Correction Candidate
+
+Issue：
+https://github.com/EOMZON/nutrition-ledger-mvp/issues/28
+
+Draft PR：
+https://github.com/EOMZON/nutrition-ledger-mvp/pull/29
+
+验证：
+https://github.com/EOMZON/nutrition-ledger-mvp/actions/runs/35312188955
+
+状态：
+```text
+CANDIDATE_VERIFIED
+INTEGRATION_DEFERRED
+REAL_LEDGER_NOT_MUTATED
+TEST_NOT_MOVED
+```
+
 ## 6. 本机 / worktree 历史回执
 
 https://github.com/EOMZON/nutrition-ledger-mvp/issues/24
