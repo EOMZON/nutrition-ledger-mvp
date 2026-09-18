@@ -67,11 +67,21 @@ test.describe.serial("Nutrition Ledger release scenarios", () => {
     foodId = await page.locator("#cap-food").inputValue();
     expect(foodId).toContain("food:barcode:");
 
+    // Dogfood regression: adjacent nutrient values without "%" must not become NRV%.
+    await page.locator("#cap-text").fill(
+      "每100g 能量 539kcal 蛋白质 6.3g 脂肪 30.9g 饱和脂肪 10.6g 碳水化合物 57.5g 糖 56.3g",
+    );
+    await page.getByRole("button", { name: "解析" }).click();
+    await expect(page.locator("#cap-parse-v")).toContainText("protein_g=6.3g");
+    await expect(page.locator("#cap-parse-v")).not.toContainText("_nrv_pct=");
+
+    // Explicit percentages remain supported.
     await page.locator("#cap-text").fill(
       "每100g 能量 1500kJ 18% 蛋白质 3.2g 5% 脂肪 5.6g 9% 碳水化合物 10.2g 3% 钠 120mg 6%",
     );
     await page.getByRole("button", { name: "解析" }).click();
     await expect(page.locator("#cap-parse-v")).toContainText("protein_g=3.2g");
+    await expect(page.locator("#cap-parse-v")).toContainText("protein_nrv_pct=5%");
     await page.locator("#cap-amt").fill("100");
     await expect(page.locator("#cap-add-today")).toBeChecked();
     await page.getByRole("button", { name: "写入观测" }).click();
