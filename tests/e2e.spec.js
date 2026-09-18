@@ -167,6 +167,59 @@ test.describe.serial("Nutrition Ledger release scenarios", () => {
     await expect(page.locator("#today-count")).toContainText("0 entries");
   });
 
+  test("correction: invalidation preserves history and makes selected value unresolved", async ({ page }) => {
+    test.skip(readOnly, "production canary is intentionally read-only");
+
+    await gotoApp(page, "/#foods");
+    await page.locator("#food-search").fill(foodLabel);
+    await page.getByText(foodLabel, { exact: true }).first().click();
+
+    const before = await browserGet(page, `/api/foods/${encodeURIComponent(foodId)}`);
+    const selectedProtein = Object.values(before.body.effective || {}).find(
+      (hit) => hit?.observation?.nutrientId === "protein_g",
+    );
+    expect(selectedProtein?.observation?.id).toBeTruthy();
+
+    const invalidation = await page.evaluate(
+      async ({ observationId }) => {
+        const response = await fetch("/api/observations/invalidate", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            observationId,
+            reason: "e2e_parser_bug",
+            evidenceRef: "fixture:e2e",
+          }),
+        });
+        return { status: response.status, body: await response.json() };
+      },
+      { observationId: selectedProtein.observation.id },
+    );
+    expect(invalidation.status).toBe(200);
+    expect(invalidation.body.event.type).toBe("observation.invalidate");
+
+    const after = await browserGet(page, `/api/foods/${encodeURIComponent(foodId)}`);
+    const proteinEffective = Object.values(after.body.effective || {}).find(
+      (hit) =>
+        hit?.invalidatedObservation?.nutrientId === "protein_g" ||
+        hit?.observation?.nutrientId === "protein_g",
+    );
+    expect(proteinEffective?.status).toBe("selected_invalidated");
+    expect(proteinEffective?.observation).toBeNull();
+
+    await page.reload();
+    await expect(page.locator("body")).toHaveAttribute("data-app-ready", "true");
+    await page.locator("#food-search").fill(foodLabel);
+    await page.getByText(foodLabel, { exact: true }).first().click();
+
+    const proteinRow = page.locator('tr[data-nutrient="protein_g"]');
+    await expect(proteinRow).toContainText("—");
+    await proteinRow.getByRole("button", { name: "历史" }).click();
+    const invalidatedItem = page.locator(".history-item").filter({ hasText: "invalidated" }).first();
+    await expect(invalidatedItem).toContainText("e2e_parser_bug");
+    await expect(invalidatedItem.getByRole("button", { name: "使用此值" })).toBeDisabled();
+  });
+
   test("export: append-only records remain explainable", async ({ page }) => {
     test.skip(readOnly, "production canary is intentionally read-only");
 
