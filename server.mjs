@@ -5,6 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promises as fs } from "node:fs";
 import crypto from "node:crypto";
+import { annotateObservationValidity, resolveEffectiveObservation } from "./src/domain/observation-validity.mjs";
 
 const APP_DIR = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(APP_DIR, "../..");
@@ -490,30 +491,27 @@ async function getFoodView(foodId) {
   const food = (foods.items || []).find((f) => f.id === foodId) || null;
   if (!food) return null;
 
-  const allObservations = (await readJsonl(FILES.observations)).filter((o) => o.foodId === foodId);
+  const rawObservations = (await readJsonl(FILES.observations)).filter((o) => o.foodId === foodId);
   const allEvents = (await readJsonl(FILES.events)).filter((e) => e.foodId === foodId);
+  const allObservations = annotateObservationValidity(rawObservations, allEvents);
   const evidenceLedger = await readJsonl(FILES.evidence);
   const evidenceById = mergeEvidenceLedger(evidenceLedger);
 
   const grouped = {};
-  for (const o of allObservations) {
-    const key = makeSelectionKey({ foodId: o.foodId, nutrientId: o.nutrientId, basis: o.basis });
+  for (const observation of rawObservations) {
+    const key = makeSelectionKey({
+      foodId: observation.foodId,
+      nutrientId: observation.nutrientId,
+      basis: observation.basis,
+    });
     if (!grouped[key]) grouped[key] = [];
-    grouped[key].push(o);
+    grouped[key].push(observation);
   }
 
   const effective = {};
   for (const [key, observations] of Object.entries(grouped)) {
-    const sel = selections.byKey?.[key];
-    const selectedId = sel?.selectedObservationId;
-    let picked = selectedId ? observations.find((o) => o.id === selectedId) : null;
-    if (!picked) picked = pickDefaultObservation(observations) || null;
-    if (picked) {
-      effective[key] = {
-        observation: picked,
-        selection: sel || null,
-      };
-    }
+    const selection = selections.byKey?.[key] || null;
+    effective[key] = resolveEffectiveObservation(observations, selection, allEvents);
   }
 
   return {
@@ -683,6 +681,12 @@ async function createObservation({ foodId, nutrientId, value, unit, basis, metho
       parentId,
       note,
     }),
+  );
+}
+
+async function invalidateObservation({ observationId, reason, evidenceRef, by }) {
+  return enqueueWrite(() =>
+    invalidateObservationNoQueue({ observationId, reason, evidenceRef, by }),
   );
 }
 
@@ -1123,6 +1127,45 @@ async function createObservationNoQueue({
   return obs;
 }
 
+async function invalidateObservationNoQueue({
+  observationId,
+  reason,
+  evidenceRef,
+  by,
+}) {
+  const targetId = String(observationId || "").trim();
+  const correctionReason = String(reason || "").trim();
+  if (!targetId) throw new Error("observationId required");
+  if (!correctionReason) throw new Error("reason required");
+
+  const observations = await readJsonl(FILES.observations);
+  const observation = observations.find((item) => String(item?.id || "") === targetId) || null;
+  if (!observation) throw new Error("observation not found");
+
+  const events = await readJsonl(FILES.events);
+  const existing = events.find(
+    (event) =>
+      event?.type === "observation.invalidate" &&
+      String(event?.observationId || "") === targetId,
+  );
+  if (existing) return existing;
+
+  const event = {
+    type: "observation.invalidate",
+    id: uuid("evt"),
+    observationId: targetId,
+    foodId: observation.foodId,
+    nutrientId: observation.nutrientId,
+    basisKey: basisKeyFromBasis(observation.basis),
+    reason: correctionReason,
+    evidenceRef: String(evidenceRef || "").trim(),
+    createdAt: nowIso(),
+    createdBy: String(by || "user:local"),
+  };
+  await appendJsonl(FILES.events, event);
+  return event;
+}
+
 async function createObservationsBatchNoQueue({ observations }) {
   if (!Array.isArray(observations) || observations.length === 0) {
     throw new Error("observations[] required");
@@ -1357,6 +1400,17 @@ export async function handleHttpRequest(req, res) {
       const body = await readJsonBody(req, { limitBytes: 6_000_000 });
       const created = await createObservationsBatch(body || {});
       return json(res, 200, { observations: created });
+    }
+
+    if (req.method === "POST" && pathname === "/api/observations/invalidate") {
+      const body = await readJsonBody(req, { limitBytes: 1_000_000 });
+      const event = await invalidateObservation({
+        observationId: body.observationId,
+        reason: body.reason,
+        evidenceRef: body.evidenceRef,
+        by: "user:local",
+      });
+      return json(res, 200, { event });
     }
 
     if (req.method === "POST" && pathname === "/api/selections") {
