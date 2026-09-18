@@ -18,6 +18,19 @@ https://github.com/EOMZON/nutrition-ledger-mvp/blob/docs/xhs-opportunity-followu
 
 https://github.com/EOMZON/nutrition-ledger-mvp/blob/docs/xhs-opportunity-followup-20260918/docs/analysis/2026-09-18-xhs-opportunity-productization-mainline.md
 
+## 4.1 当前怎么用 / 是否线上
+
+https://github.com/EOMZON/nutrition-ledger-mvp/blob/docs/xhs-opportunity-followup-20260918/docs/operations/2026-09-18-current-usage-and-deployment-status.md
+
+关键结论：
+
+```text
+current real usage = localhost:8789
+latest P1 Production = NO
+historical Vercel Production = evidence only / current availability unverified
+local private ledger != historical cloud KV
+```
+
 ## 5. 业务 Issues
 
 主线：
