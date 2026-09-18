@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import path from "node:path";
 import { readFile } from "node:fs/promises";
+import { buildObservationInvalidationMap } from "../src/domain/observation-validity.mjs";
 
 const DATA_DIR = path.resolve(process.env.NUTRITION_LEDGER_DATA_DIR || "data");
 
@@ -54,6 +55,10 @@ function pushIssue(issues, code, message, context = {}) {
   issues.push({ code, message, ...context });
 }
 
+function pushWarning(warnings, code, message, context = {}) {
+  warnings.push({ code, message, ...context });
+}
+
 async function main() {
   const files = {
     foods: path.join(DATA_DIR, "state/foods.json"),
@@ -72,6 +77,7 @@ async function main() {
   const intakesFile = await readJsonl(files.intakes);
 
   const issues = [];
+  const warnings = [];
   if (foodsState.__parseError) pushIssue(issues, "foods_json_invalid", foodsState.__parseError);
   if (selectionsState.__parseError) pushIssue(issues, "selections_json_invalid", selectionsState.__parseError);
 
@@ -94,6 +100,31 @@ async function main() {
 
   const foodIds = new Set(foods.map((item) => item?.id).filter(Boolean));
   const observationIds = new Set(observations.map((item) => item?.id).filter(Boolean));
+  const invalidationEvents = eventsFile.records.filter(
+    (event) => event?.type === "observation.invalidate",
+  );
+  const invalidationMap = buildObservationInvalidationMap(invalidationEvents);
+
+  for (const event of invalidationEvents) {
+    const observationId = String(event?.observationId || "").trim();
+    if (!observationId) {
+      pushIssue(
+        issues,
+        "observation_invalidation_missing_target",
+        "Observation invalidation is missing observationId",
+        { eventId: event?.id },
+      );
+      continue;
+    }
+    if (!observationIds.has(observationId)) {
+      pushIssue(
+        issues,
+        "observation_invalidation_missing_observation",
+        `Observation invalidation ${event?.id || "(unknown)"} references missing observation ${observationId}`,
+        { eventId: event?.id, observationId },
+      );
+    }
+  }
   const evidenceIds = new Set(
     evidence.filter((item) => item?.type === "evidence.create").map((item) => item?.id).filter(Boolean),
   );
@@ -155,6 +186,18 @@ async function main() {
         { key, observationId: selectedId },
       );
     }
+    if (selectedId && invalidationMap.has(selectedId)) {
+      pushWarning(
+        warnings,
+        "selection_invalidated_observation",
+        `Selection ${key} still points to invalidated observation ${selectedId}`,
+        {
+          key,
+          observationId: selectedId,
+          invalidationEventId: invalidationMap.get(selectedId)?.eventId || "",
+        },
+      );
+    }
   }
 
   for (const record of intakes) {
@@ -196,6 +239,7 @@ async function main() {
     counts: {
       foods: foods.length,
       observations: observations.length,
+      invalidationEvents: invalidationEvents.length,
       selections: Object.keys(selectionsState.byKey || {}).length,
       events: eventsFile.records.length,
       evidenceRecords: evidence.length,
@@ -203,6 +247,7 @@ async function main() {
       intakeEntries: intakeAddIds.size,
     },
     issues,
+    warnings,
   };
 
   console.log(JSON.stringify(result, null, 2));

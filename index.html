@@ -1589,7 +1589,10 @@
         html.push(`<div class="kpi"><div class="k">Target</div><div class="v">${escapeHtml(view.food.label)} · <span class="mono">${escapeHtml(nutrient.id)}</span></div></div>`);
         html.push(`<div style="height:12px"></div>`);
 
-        const earliest = list[list.length - 1];
+        const earliest = list
+          .slice()
+          .reverse()
+          .find((observation) => observation?.validity?.status !== "invalidated");
         const canRollback = earliest && earliest.id && earliest.id !== selectedId;
 
         html.push(`<div class="row-actions" style="justify-content:flex-end;margin-bottom:10px">
@@ -1600,15 +1603,17 @@
           const e = o.evidenceId ? state.evidenceCache[o.evidenceId] : null;
           const thumb = e?.thumb?.path ? `<img class="thumb" data-lightbox="${escapeHtml(e.preview?.path || e.thumb?.path)}" src="${escapeHtml(e.thumb?.path)}" alt="evidence" />` : "";
           const current = o.id === selectedId;
+          const invalidated = o?.validity?.status === "invalidated";
+          const invalidationReason = String(o?.validity?.reason || "").trim();
           html.push(`
             <div class="history-item">
               <div class="history-top">
                 <div>
-                  <div class="history-val mono">${escapeHtml(o.value)} ${escapeHtml(o.unit)} ${current ? '<span class="pill strong" style="margin-left:8px">current</span>' : ""}</div>
+                  <div class="history-val mono">${escapeHtml(o.value)} ${escapeHtml(o.unit)} ${current ? '<span class="pill strong" style="margin-left:8px">current</span>' : ""} ${invalidated ? '<span class="pill" style="margin-left:8px">invalidated</span>' : ""}</div>
                   <div class="history-meta">${escapeHtml(o.source || "?")} · ${escapeHtml(o.method || "?")} · ${escapeHtml(fmt(o.createdAt))}</div>
                 </div>
                 <div class="row-actions">
-                  <button class="btn tiny" type="button" data-use="${escapeHtml(o.id)}" ${current ? "disabled" : ""}>使用此值</button>
+                  <button class="btn tiny" type="button" data-use="${escapeHtml(o.id)}" ${current || invalidated ? "disabled" : ""}>使用此值</button>
                 </div>
               </div>
               <div style="display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap">
@@ -1616,6 +1621,7 @@
                 <div class="muted" style="font-size:12px;min-width:240px;flex:1">
                   ${o.note ? `note: ${escapeHtml(o.note)}` : "—"}
                   ${o.parentId ? `<div class="mono" style="margin-top:6px">parent: ${escapeHtml(o.parentId)}</div>` : ""}
+                  ${invalidated ? `<div style="margin-top:6px">invalidated: ${escapeHtml(invalidationReason || "no reason")}</div>` : ""}
                 </div>
               </div>
             </div>
