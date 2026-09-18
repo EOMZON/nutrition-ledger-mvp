@@ -1,204 +1,274 @@
 # Nutrition 主线全盘复盘：最初目标、当前状态、差距与时间线
 
-日期：2026-09-18  
+日期：2026-09-18 晚间  
 业务仓：`EOMZON/nutrition-ledger-mvp`  
-当前远端 integration target：`test@244f4c188993e0633833a0b9fd936afedb29605c`  
+当前 integration target：`test@244f4c188993e0633833a0b9fd936afedb29605c`  
 正式基线：`main@298cd1f1e46a62d1cd83efca79be73edbadd6c32`（未推广）
 
 ## 1. 最初目标
 
-最初目标不是做“大而全营养平台”，而是完成一个真正每天愿意使用的个人营养账本：
+最初目标不是做大而全营养平台，而是：
 
 ```text
 吃了什么
 → 快速记录
 → 来源可见
 → 错了可修
-→ Today 冻结历史
+→ 历史不被静默重写
 → 下次快速复用
-→ 连续每天愿意真实使用
+→ 每天真的愿意使用
+→ 最后回答“今天还差什么”
 ```
 
-XHS 31/31 评论补充的下一层产品价值是：
+XHS 31/31 评论验证的下一层价值：
 
 ```text
-我已经知道今天吃了什么
-→ 那今天哪些已经覆盖？
-→ 还剩哪些？
-→ 哪些只是数据未知？
+今天哪些已覆盖？
+哪些还剩？
+哪些只是数据未知？
 ```
 
-因此最终产品定义保持：
+最终产品定义保持：
 
-> Evidence-first Personal Nutrition Ledger：快速记录真实饮食，保留营养数据来源与不确定性，冻结历史，并在用户明确设定/选择目标后告诉用户 COVERED / REMAINING / UNKNOWN。
+> Evidence-first Personal Nutrition Ledger：低摩擦记录真实饮食，保留营养数据来源、不确定性与历史真相；在用户明确设定/选择目标后，给出 COVERED / REMAINING / UNKNOWN。
 
-非目标：
-- 菜谱；
-- 库存；
-- 购物；
-- 社区；
-- AI 医疗建议；
-- Apple Health 总控；
-- 大规模框架迁移；
-- 第二套 Nutrition 数据库/状态机。
+## 2. 当前状态
 
-## 2. 当前真实状态
-
-### 2.1 远端代码
+### 2.1 Git / consumer
 
 ```text
 main = 298cd1f1e46a62d1cd83efca79be73edbadd6c32
 test = 244f4c188993e0633833a0b9fd936afedb29605c
+canonical = /Users/zon/Desktop/MINE/html/nutrition-ledger-mvp
+consumer = CONSUMER_VERIFIED
+worktree = 1
+local branches = 0
 ```
 
-当前 `test` 保持为已验证 integration candidate；`main` / Production 未推广。
+#24 / #25 已完成，误建立的 fresh clone 已退出，private data / blobs preserved。
 
-关键 lineage：
+### 2.2 Dogfood
+
+- Day 1：PASS
+- Day 2：PASS
+- Day 3–7：PENDING
+
+Day 2 脱敏证据：
 
 ```text
-4e735a0  Today P1 合入 test
-   ↓
-457d5c2  dogfood / parser handoff docs
-   ↓
-a6a4527  NRV parser 修复
-   ↓
-f617184  NRV regression tests
-   ↓
-244f4c1  parser fix 正式进入 test
+eatingEvents = 1
+medianSeconds = 0.315
+p90Seconds = 0.315
+manualCorrections = 0
+structuralRepairs = 0
+silentHistoricalChanges = 0
+sourceMissingCount = 0
+unknownNutritionCount = 0
+audit = PASS
 ```
 
-### 2.2 本机 consumer / worktree / private data
-
-最新真实 canonical：
-
-```text
-/Users/zon/Desktop/MINE/html/nutrition-ledger-mvp
-```
-
-最新本机回执已经确认：
-
-- canonical HEAD = `244f4c188993e0633833a0b9fd936afedb29605c`
-- worktree = 1
-- local branch = 0，detached at `origin/test`
-- tracked dirty = 0
-- existing untracked `.playwright-cli/` 保留
-- ignored private data / blobs 保留
-- `CANONICAL_VERIFIED`
-- `CONSUMER_VERIFIED`
-- Post-Merge = `SYNCHRONIZED`
-- unit 10/10
-- real-data parser dogfood PASS
-- audit:data = `ok=true / issues=[]`
-
-误建立的无私人数据 fresh clone 已移入系统 Trash，当前不再作为 canonical consumer。
-
-证据：
-- https://github.com/EOMZON/nutrition-ledger-mvp/issues/25
-- https://github.com/EOMZON/nutrition-ledger-mvp/issues/24
-
-## 3. 已完成能力
-
-- Today-first 默认日用入口；
-- legacy workbench 保留；
-- meal first-class + 历史 note fallback；
-- domain nutrient registry；
-- saturated fat / sugars / fiber；
-- provenance / method / source；
-- `AI 粗估 · 约`；
-- recent / common / repeat；
-- quick add；
-- barcode → Open Food Facts → confirm → Today；
-- append-only intake；
-- frozen historical snapshot；
-- data audit；
-- unit / E2E / visual；
-- 真实 1-day dogfood；
-- NRV parser dogfood bug 已修复。
-
-速度证据（Day 1）：
-- existing food ≈ 3 秒；
-- recent repeat ≈ 2 秒；
-- ordinary Capture parse+commit ≈ 2 秒；
-- barcode lookup / confirm 已真实使用。
-
-## 4. 当前未完成
-
-### P0：7-day dogfood
-
-Issue：
+Canonical Issue：
 https://github.com/EOMZON/nutrition-ledger-mvp/issues/18
 
-当前只有 Day 1，不能由单次 AI 伪造 Day 2–7。
+### 2.3 Parser
 
-### P0/P1：历史错误 NRV correction
+NRV parser #19 已修复并进入 `test@244f4c1...`：
 
-Issue：
-https://github.com/EOMZON/nutrition-ledger-mvp/issues/28
+- 无显式百分号不再生成 `*_nrv_pct`
+- 显式百分号仍正常
+- 本机 real-data readback PASS
 
-旧 parser 曾写入 3 条错误 NRV observation。当前 parser 已修复，新数据不再继续污染；但 append-only ledger 缺少安全的 invalidate/supersede/unset 语义。
+### 2.4 Historical correction
 
-原则：
-- 不删除 JSONL 行；
-- 不覆盖 observation；
-- 不静默改写；
-- 历史仍可审计；
-- invalid observation 不能继续进入 effective selection / Coverage。
+旧 parser 留下 3 条 known-invalid NRV observation。
 
-### P1：Coverage / Remaining / Unknown
+#28 已有完整 verified candidate：
 
-Issue：
+https://github.com/EOMZON/nutrition-ledger-mvp/issues/28  
+https://github.com/EOMZON/nutrition-ledger-mvp/pull/29
+
+Candidate：
+`60b8dc0fbc7056b6b359f05149c4cf0c71e84fe9`
+
+状态：
+
+```text
+CANDIDATE_VERIFIED
+INTEGRATION_DEFERRED
+REAL_LEDGER_NOT_MUTATED
+TEST_NOT_MOVED
+```
+
+实现：
+- append-only `observation.invalidate`
+- active / invalidated resolver
+- selected-invalidated explicit unresolved
+- no silent fallback
+- audit
+- History UI
+- frozen intake 不回写
+
+验证：
+- unit 14/14
+- browser 13/13
+- visual 2/2
+- isolated audit PASS
+
+保持 Draft 是有意设计：7-day 期间冻结 runtime baseline。
+
+### 2.5 Coverage
+
+#26 仍 BLOCKED：
+
 https://github.com/EOMZON/nutrition-ledger-mvp/issues/26
 
-在 7-day 和 correction 语义没有稳定前不进入大规模实现。
+依赖：
+- #18 7-day
+- #28 correction integration
 
-## 5. 时间线
+## 3. 当前架构位置
+
+```mermaid
+flowchart LR
+    Capture["Capture"] --> Truth["Evidence / Observation / Selection"]
+    Truth --> Daily["Frozen Intake / Today / Repeat"]
+    Daily --> Dogfood["7-day real use"]
+    Truth -. known-invalid .-> Correction["#28 Invalidation Candidate"]
+    Dogfood --> Integrate["Correction Integration"]
+    Correction --> Integrate
+    Integrate --> Coverage["Coverage / Remaining / Unknown"]
+    Coverage --> Beta["5–10 User Beta"]
+    Beta --> Release["Release Gate"]
+```
+
+## 4. 理想架构
+
+```mermaid
+flowchart TB
+    subgraph Capture["Capture"]
+        Q["Quick Add"]
+        R["Repeat"]
+        B["Barcode"]
+        L["Label / OCR"]
+        A["AI Estimate"]
+    end
+
+    subgraph Truth["Evidence-first Truth"]
+        E["Evidence / Provider"]
+        O["Observation"]
+        C["Correction / Invalidation"]
+        S["Effective Selection"]
+    end
+
+    subgraph Daily["Daily Reality"]
+        I["Frozen Intake"]
+        M["Meal"]
+        T["Today"]
+        H["History"]
+    end
+
+    subgraph Decision["Decision"]
+        Agg["DailyNutrientAggregate"]
+        Target["NutrientTarget"]
+        State["CoverageState"]
+        Covered["COVERED"]
+        Remain["REMAINING"]
+        Unknown["UNKNOWN"]
+    end
+
+    Capture --> E --> O
+    O --> S
+    C --> S
+    S --> I
+    I --> M
+    I --> H
+    I --> T
+    I --> Agg
+    Target --> State
+    Agg --> State
+    State --> Covered
+    State --> Remain
+    State --> Unknown
+```
+
+核心不变量：
+
+```text
+UNKNOWN != 0
+UNKNOWN != REMAINING
+invalidated observation != deleted history
+target change != rewrite historical intake
+AI estimate != verified truth
+```
+
+## 5. 当前 vs 理想
+
+| 层 | 当前 | 理想 | 差距 |
+|---|---|---|---|
+| Capture | 基本完成 | 日用低摩擦 | 继续真实使用验证 |
+| Provenance | 完成 | 全链可解释 | 无重大结构缺口 |
+| Correction | verified candidate | 已集成 + real correction | 等 7-day integration node |
+| Daily | 工程闭环 | 连续自然使用 | Day 3–7 |
+| Coverage | 未实现 | Covered/Remaining/Unknown | #18 + #28 后启动 |
+| Beta | 未开始 | 5–10 真实用户 | Coverage 后 |
+| Production | 暂停 | 受控正式发布 | Beta / #59 后 |
+
+## 6. 时间线
 
 | 日期 | 节点 | 状态 |
 |---|---|---|
-| 2026-08-31 | production baseline / Preview / Production 验证 | 已有历史证据 |
-| 2026-09-16 | production baseline + Daily Nutrition 分层 reconciliation | 完成 |
+| 2026-08-31 | 历史 Preview / Production 验证 | 历史证据 |
 | 2026-09-17 | Today P1 合入 test | 完成 |
-| 2026-09-17 | 本机 real-data audit + Day 1 dogfood | 完成 |
-| 2026-09-17 | dogfood 暴露 NRV parser bug | 已定位 |
-| 2026-09-18 | parser fix + source exact-SHA + post-merge exact-SHA | 完成 |
-| 2026-09-18 | 真实 canonical 对齐最新 test；fresh clone 退出 | 完成 |
-| 2026-09-18 起 | Day 2–7 dogfood | 进行中 |
-| 7-day 后 | Coverage contract / MVP | BLOCKED |
-| Beta 后 | Vercel / test→main / Production | BLOCKED |
+| 2026-09-17 | real-data audit + Day 1 | PASS |
+| 2026-09-17 | dogfood 暴露 NRV parser bug | 已修复 |
+| 2026-09-18 | parser fix 进入 test@244f4c1 | 完成 |
+| 2026-09-18 | canonical resync / consumer readback | 完成 |
+| 2026-09-18 | Day 2 | PASS |
+| 2026-09-18 | #28 correction candidate | VERIFIED / DEFERRED |
+| 2026-09-19~ | Day 3–7 | 待自然发生 |
+| 7-day 后 | correction integration | 待执行 |
+| correction 后 | Coverage MVP | BLOCKED |
+| Coverage 后 | Beta | 待开始 |
+| Beta 后 | Release Gate | 待开始 |
 
-## 6. 当前最主要差距
+## 7. 当前最重要差距
 
 ```text
-记录层        ≈ 已完成
-可信/追溯层   ≈ 已完成
-真实 Day 1    = PASS
-真实 Day 2–7  = PENDING
-Correction    = 缺 invalidate/supersession
-Coverage      = 尚未实现
-Beta          = 尚未开始
-Production    = 有意暂停
+不是：
+更多 provider
+更多营养字段
+更多 dashboard
+
+而是：
+真实连续使用
+→ 历史错误安全修正
+→ 今天还差什么
 ```
 
-## 7. 当前决策
+## 8. 当前决策
 
-### 现在做
+现在做：
+1. 冻结 `test@244f4c1...`
+2. 完成 Day 3–7
+3. 保持 #29 Draft，不堆零碎提交
+4. Day 7 后重新 compare / integrate #29
+5. exact-SHA verify + consumer resync
+6. 真实 3 条旧 NRV append-only correction
+7. 启动 #26
 
-1. 冻结 `test@244f4c1...` 作为 dogfood runtime baseline；
-2. 完成同一真实 private ledger 的 Day 2–7；
-3. 并行设计 #28 append-only correction contract；
-4. 只更新 Issue / docs / Context pointer，不为文档移动 test；
-5. 7-day 结束后评估 #26。
+现在不做：
+- 菜谱
+- 库存
+- 购物
+- 社区
+- AI 医疗建议
+- Apple Health 总控
+- 新数据库
+- framework 重写
+- test→main
+- Production
 
-### 现在不做
-
-- 不合并 docs Draft PR 仅为了“看起来完整”；
-- 不启动 Coverage 大规模开发；
-- 不 test→main；
-- 不 Production；
-- 不迁移私人 data；
-- 不删除历史错误 observation。
-
-## 8. Canonical links
+## 9. Canonical links
 
 业务：
 - https://github.com/EOMZON/nutrition-ledger-mvp/issues/10
@@ -210,9 +280,3 @@ Production    = 有意暂停
 - https://github.com/EOMZON/creationos-os/issues/59
 - https://github.com/EOMZON/creationos-os/issues/128
 - https://github.com/EOMZON/codex-skills-private/issues/29
-
-治理：
-- https://github.com/EOMZON/codex-skills-private/blob/9a8e385ccc98f068b0990133f9a2e80681ffa9ec/github-ops/references/test-main-governance.md
-- https://github.com/EOMZON/codex-skills-private/blob/main/worktree-audit/SKILL.md
-- https://github.com/EOMZON/codex-skills-private/blob/main/worktree-audit/references/merge-reconciliation.md
-- https://github.com/EOMZON/codex-skills-private/blob/main/worktree-audit/references/post-merge-synchronization.md
