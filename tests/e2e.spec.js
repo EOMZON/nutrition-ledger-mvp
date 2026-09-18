@@ -218,6 +218,10 @@ test.describe.serial("Nutrition Ledger release scenarios", () => {
     const invalidatedItem = page.locator(".history-item").filter({ hasText: "invalidated" }).first();
     await expect(invalidatedItem).toContainText("e2e_parser_bug");
     await expect(invalidatedItem.getByRole("button", { name: "使用此值" })).toBeDisabled();
+    await page.screenshot({
+      path: "test-results/observation-invalidation-history.png",
+      fullPage: true,
+    });
   });
 
   test("export: append-only records remain explainable", async ({ page }) => {
