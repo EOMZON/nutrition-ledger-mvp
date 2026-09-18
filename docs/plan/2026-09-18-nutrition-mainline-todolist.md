@@ -177,3 +177,22 @@ https://github.com/EOMZON/creationos-os/issues/59
 - 新数据库
 - React/framework 重写
 - 未验证的 provider 扩张
+
+
+## 当前使用 / 部署真相
+
+当前真实 dogfood 入口：
+
+```text
+http://127.0.0.1:8789
+```
+
+完整使用与部署状态：
+
+https://github.com/EOMZON/nutrition-ledger-mvp/blob/docs/xhs-opportunity-followup-20260918/docs/operations/2026-09-18-current-usage-and-deployment-status.md
+
+- [x] 本机最新 consumer = `test@244f4c1...`
+- [x] 本机真实 private ledger continuity 已确认
+- [ ] 最新 P1 Production 尚未发布
+- [ ] 历史 Vercel deployment 当前可达性尚未 provider readback
+- [ ] #59 Release Gate 前禁止把旧 URL 当当前正式线上
