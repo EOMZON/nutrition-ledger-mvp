@@ -89,6 +89,34 @@ observation.invalidate
 - [ ] 不修改真实 ledger
 - [ ] 不移动 test，除非经过独立 review + dogfood 时机判断
 
+### P0.4A #28 candidate 状态
+
+- [x] Domain invalidation resolver
+- [x] `observation.invalidate` append-only API
+- [x] selected-invalidated → explicit unresolved
+- [x] LedgerClient mutation
+- [x] audit invalidation references / warnings
+- [x] History UI invalidated badge + reason
+- [x] unit 14/14
+- [x] browser 13/13
+- [x] visual 2/2
+- [x] screenshot evidence
+- [x] live OFF / isolated audit
+- [ ] **不 merge test；等待 #18 dogfood 节点与 integration review**
+- [ ] **不执行真实 3 条 NRV correction**
+
+Draft candidate：
+https://github.com/EOMZON/nutrition-ledger-mvp/pull/29
+
+Exact-SHA verification：
+https://github.com/EOMZON/nutrition-ledger-mvp/actions/runs/35312188955
+
+Artifact：
+https://github.com/EOMZON/nutrition-ledger-mvp/actions/runs/35312188955/artifacts/10534010798
+
+Digest：
+`sha256:5629427a0e4b3a8f292121ea54bd378a40d9572eef30de48b4c41a0c6e7dcb68`
+
 ### P0.5 已知历史错误
 
 当前已知旧 parser 错误 NRV：
