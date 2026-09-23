@@ -1,12 +1,16 @@
 # Nutrition 主线执行清单 / ToDo
 
-更新：2026-09-18 晚间  
+更新：2026-09-23
 原则：本清单按最初产品目标排序，不以“做更多功能”为完成标准。
 
 ## 0. 当前权威快照
 
 ```text
-canonical = /Users/zon/Desktop/MINE/html/nutrition-ledger-mvp
+current data location = Local Mac historical canonical ledger
+future primary implementation = Virtual Server
+GitHub = source / governance
+Cloud / Provider = runtime / persistence / production
+
 main = 298cd1f1e46a62d1cd83efca79be73edbadd6c32
 test = 244f4c188993e0633833a0b9fd936afedb29605c
 consumer = CONSUMER_VERIFIED
@@ -21,20 +25,34 @@ Coverage #26 = BLOCKED ON #18 + #28
 main / Production = NOT PROMOTED
 ```
 
+**术语纠正：**
+```text
+local-first canonical
+= 当前数据位置的事实描述
+!= 未来 implementation environment
+```
+
+未来 implementation 默认在 Virtual Server 推进；Local Mac 只在 VM 缺历史/私有资料时提供 Source Acquisition。
+
 业务状态优先读：
 - https://github.com/EOMZON/nutrition-ledger-mvp/issues/10
 - https://github.com/EOMZON/nutrition-ledger-mvp/issues/18
 - https://github.com/EOMZON/nutrition-ledger-mvp/issues/28
 - https://github.com/EOMZON/nutrition-ledger-mvp/issues/26
+- https://github.com/EOMZON/nutrition-ledger-mvp/issues/34
+
+跨仓协调：
+- https://github.com/EOMZON/product-hub/issues/95
+- https://github.com/EOMZON/product-hub/issues/96
+- https://github.com/EOMZON/creationos-os/issues/166
+- https://github.com/EOMZON/creationos-os/issues/169
 
 ## P0 — 当前必须完成
 
 ### P0.1 Consumer / worktree / private-data continuity — DONE
 
-- [x] #24 completed  
-  https://github.com/EOMZON/nutrition-ledger-mvp/issues/24
-- [x] #25 completed  
-  https://github.com/EOMZON/nutrition-ledger-mvp/issues/25
+- [x] #24 completed
+- [x] #25 completed
 - [x] #10 已刷新为最新 `CONSUMER_VERIFIED`
 - [x] #18 已转入真实 7-day gate
 - [x] 真实 canonical 已恢复并确认
@@ -68,8 +86,6 @@ audit:data = ok=true / issues=[]
 Issue：
 https://github.com/EOMZON/nutrition-ledger-mvp/issues/18
 
-当前：
-
 - [x] Day 1
 - [x] Day 2
 - [ ] Day 3
@@ -78,92 +94,106 @@ https://github.com/EOMZON/nutrition-ledger-mvp/issues/18
 - [ ] Day 6
 - [ ] Day 7
 
-每天仅记录脱敏统计：
-
-```text
-date
-eatingEvents
-captureEvents
-repeatEvents
-barcodeEvents
-aiEstimateEvents
-medianSeconds
-p90Seconds
-manualCorrections
-structuralRepairs
-silentHistoricalChanges
-sourceMissingCount
-unknownNutritionCount
-```
-
-Final Gate：
-
-- [ ] 连续 7 个自然日
-- [ ] normal records ≥80% ≤30s
-- [ ] repeat ≤10s
-- [ ] silent historical changes = 0
-- [ ] imported observation 都有 source + method
-- [ ] export 可解释
-- [ ] structural repairs <10%
-- [ ] 用户自然愿意继续使用
+数据库选型不得阻断该 Gate；daily writer 保持不变。
 
 ### P0.4 Append-only correction — CANDIDATE VERIFIED
 
 Issue：
 https://github.com/EOMZON/nutrition-ledger-mvp/issues/28
 
-Draft PR：
-https://github.com/EOMZON/nutrition-ledger-mvp/pull/29
-
-Candidate：
-`60b8dc0fbc7056b6b359f05149c4cf0c71e84fe9`
-
-Exact-SHA verification：
-https://github.com/EOMZON/nutrition-ledger-mvp/actions/runs/35312188955
-
-已完成：
-
-- [x] `observation.invalidate` append-only event
-- [x] 原 observation 永久保留
-- [x] active / invalidated resolver
-- [x] selected invalidated → explicit unresolved
-- [x] 不静默 fallback
-- [x] LedgerClient mutation
-- [x] audit dangling invalidation / warning
-- [x] History invalidated badge + reason
-- [x] invalidated observation 禁止重新选用
-- [x] frozen historical intake 不回写
-- [x] sanitized unit / browser fixture
-- [x] unit 14/14
-- [x] browser 13/13
-- [x] visual 2/2
-- [x] screenshot evidence
-- [x] isolated audit
-
 仍需：
-
 - [ ] Day 7 后重新 compare current test
-- [ ] 若 target 已移动则 reverify
 - [ ] integration owner 决定吸收 PR #29
 - [ ] merge 后 exact test SHA verification
 - [ ] canonical consumer resync
 - [ ] real-ledger correction 前 backup / exact observation identity readback
-- [ ] 对真实 3 条旧错误 NRV 执行 append-only invalidation
+- [ ] real correction
 - [ ] correction 后 audit / export / Today readback
 
-### P0.5 已知历史错误
+### P0.5 Database Selection + Three-Environment Gate
 
-当前已知旧 parser 错误 NRV：
+Issue：
+https://github.com/EOMZON/nutrition-ledger-mvp/issues/34
 
-- 3 条 known-invalid observation；
-- 不在公共 Issue 保存私人食物身份；
-- 不删除、不覆盖；
-- #26 Coverage 不得消费这些值；
-- correction integration 前保持已知 blocker 状态。
+Cross-repo：
+https://github.com/EOMZON/product-hub/issues/96
+
+CreationOS：
+https://github.com/EOMZON/creationos-os/issues/169
+
+#### Environment contract
+
+```text
+Local Mac
+= Source Acquisition / Legacy Material Recovery
+
+Virtual Server
+= Primary Implementation
+= clone / worktree / code / tests / migration rehearsal / verification
+
+Cloud / Provider
+= persistence / runtime / production
+```
+
+#### Database decision dependency
+
+```text
+Database Selection
+→ allocation / lifecycle
+→ provider capability
+→ minimum permissions
+→ persistence adapter
+→ migration rehearsal
+→ data verification
+→ controlled cutover
+→ consumer readback
+```
+
+候选至少包括：
+- Cloudflare D1
+- Managed PostgreSQL
+- Virtual Server SQLite / file DB
+
+至少比较：
+- cost / free tier / growth cost
+- storage / read / write / limits
+- backup / restore / recovery
+- VM network access
+- secrets / roles / least privilege
+- test/staging/production isolation
+- ops burden
+- lock-in
+- restore blast radius
+- Nutrition private-data fit
+
+**本阶段只做选型与 capability contract，不创建/迁移数据库。**
 
 ## P1 — #18 + #28 收口后启动
 
-### P1.1 Coverage / Remaining / Unknown
+### P1.1 Persistence Port / Adapter
+
+目标：
+
+```text
+Nutrition Domain
+→ Repository / Persistence Port
+→ Adapter
+→ selected provider
+```
+
+原则：
+- Domain 不绑定 DB。
+- UI 不直接读写 DB。
+- Projection / ViewModel 独立。
+- adapter 替换 provider，而不是重写 domain semantics。
+
+启动条件：
+- #18 Day7 completed
+- #28 integration / historical correction decision completed
+- Database Selection 已有明确结果
+- Virtual Server minimum provider permissions 可用
+
+### P1.2 Coverage / Remaining / Unknown
 
 Issue：
 https://github.com/EOMZON/nutrition-ledger-mvp/issues/26
@@ -179,48 +209,12 @@ effective observation
 → UI
 ```
 
-Domain：
-
-- [ ] NutrientTarget
-- [ ] DailyNutrientAggregate
-- [ ] CoverageState
-
-Application：
-
-- [ ] BuildDailyAggregate
-- [ ] EvaluateCoverage
-
-Presentation：
-
-- [ ] DailyCoverageViewModel
-- [ ] CoverageSummary
-- [ ] NutrientCoverageRow
-- [ ] UnknownDataNotice
-- [ ] ProvenanceLegend
-
 硬规则：
-
-- [ ] UNKNOWN != 0
-- [ ] UNKNOWN != REMAINING
-- [ ] AI estimate 保留不确定性
-- [ ] invalidated observation 不进入 Coverage
-- [ ] target 变化不改历史 intake
-- [ ] UI 不自己计算营养事实
-
-### P1.2 第一刀营养素
-
-只使用当前可靠字段：
-
-- energy
-- protein
-- fat
-- saturated fat
-- carb
-- sugars
-- fiber
-- sodium
-
-第一版先验证“Today Decision Layer 是否有价值”，不以营养素数量取胜。
+- UNKNOWN != 0
+- UNKNOWN != REMAINING
+- invalidated observation 不进入 Coverage
+- target 变化不改历史 intake
+- UI 不自己计算营养事实
 
 ## P2 — 产品验证
 
@@ -239,34 +233,25 @@ Presentation：
 CreationOS：
 https://github.com/EOMZON/creationos-os/issues/59
 
-- [ ] real Vercel project-context build
-- [ ] release exact SHA
-- [ ] test→main 明确授权
-- [ ] Production deploy
-- [ ] protected access / SSO readback
-- [ ] public alias readback
+若采用 remote persistence：
+- [ ] selected provider exact resource identity
+- [ ] migration evidence
+- [ ] backup/restore rehearsal
+- [ ] exact source/target SHA
+- [ ] consumer readback
 - [ ] rollback point
+- [ ] authorized test→main→production path
 
 ## 当前使用 / 部署真相
 
-真实 dogfood：
-
-```text
-http://127.0.0.1:8789
-```
-
-完整状态：
+当前业务 dogfood 的历史 runtime 状态见：
 https://github.com/EOMZON/nutrition-ledger-mvp/blob/docs/xhs-opportunity-followup-20260918/docs/operations/2026-09-18-current-usage-and-deployment-status.md
 
-- [x] 本机最新 consumer = `test@244f4c1...`
-- [x] private ledger continuity 已确认
-- [ ] 最新 P1 Production 尚未发布
-- [ ] 历史 Vercel deployment 当前可达性未 provider readback
-- [ ] #59 前禁止把旧 URL 当当前正式线上
+注意：该运行事实不定义未来主实现环境。未来实现默认以 Virtual Server 为主。
 
 ## Git / Worktree Gate
 
-必须始终区分：
+始终区分：
 
 ```text
 SOURCE_SAVED
@@ -276,11 +261,25 @@ SOURCE_SAVED
 != CONSUMER_UPDATED
 ```
 
-参考：
+必须参考：
+- https://github.com/EOMZON/codex-skills-private/blob/task/issue-governance-20260920/github-ops/references/issue-governance.md
+- https://github.com/EOMZON/codex-skills-private/blob/task/issue-governance-20260920/github-ops/templates/issue-template.md
 - https://github.com/EOMZON/codex-skills-private/blob/9a8e385ccc98f068b0990133f9a2e80681ffa9ec/github-ops/references/test-main-governance.md
+- https://github.com/EOMZON/codex-skills-private/blob/main/worktree-audit/SKILL.md
 - https://github.com/EOMZON/codex-skills-private/blob/main/worktree-audit/references/merge-reconciliation.md
 - https://github.com/EOMZON/codex-skills-private/blob/main/worktree-audit/references/post-merge-synchronization.md
 - https://github.com/EOMZON/codex-skills-private/issues/29
+
+## 时间节点
+
+- 2026-09-23：三环境边界与 Database Selection Gate 正式进入主线。
+- 2026-09-24：完成 selection matrix / registry decision / minimum permission request。
+- #18 Day7：完成 dogfood，保持 writer 不变。
+- #28 integration：固定 correction semantics。
+- #34：进入 adapter implementation planning。
+- #26 Coverage MVP 前：完成 recovery story。
+- Beta 前：完成 backup/restore rehearsal。
+- #59 Release Gate：若 remote DB 被选中，完成完整 migration/recovery/readback。
 
 ## 暂缓 / 非目标
 
@@ -290,6 +289,7 @@ SOURCE_SAVED
 - 社区
 - AI 医疗教练
 - Apple Health 总控
-- 新数据库
 - React/framework 重写
 - 未验证 provider 扩张
+- 为了数据库选型而中断 daily capture
+- 把 Local Mac 当未来主实现环境
