@@ -5,6 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promises as fs } from "node:fs";
 import crypto from "node:crypto";
+import { parseNutrientValue } from "./src/domain/nutrients.mjs";
 
 const APP_DIR = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(APP_DIR, "../..");
@@ -527,12 +528,11 @@ async function getFoodView(foodId) {
 }
 
 function parseNumeric(value) {
-  const raw = String(value ?? "").trim();
-  if (!raw) return null;
-  const cleaned = raw.replace(/,/g, "").replace(/[^\d.+-eE]/g, "");
-  const n = Number.parseFloat(cleaned);
-  if (Number.isNaN(n)) return null;
-  return n;
+  // nutrition-ledger-mvp#35: 区间不得被压平成单值。"260~510" 必须返回 null，
+  // 而不是旧行为的 260510。值类型判定收敛到 domain 层 parseNutrientValue。
+  const parsed = parseNutrientValue(value);
+  if (!parsed || parsed.kind !== "scalar") return null;
+  return parsed.value;
 }
 
 function clampNumber(n, { min = -1e12, max = 1e12 } = {}) {
@@ -611,10 +611,31 @@ function computeIntakeSnapshot({ amount, basis, effectiveByNutrient }) {
     const hit = effectiveByNutrient?.[nutrient.id];
     const obs = hit?.observation;
     if (!obs) continue;
-    const per = parseNumeric(obs.value);
-    if (per == null) continue;
     const unit = String(obs.unit || nutrient.unit || "").trim();
     if (!unit) continue;
+    // nutrition-ledger-mvp#35: 区间/估算观测不得当成单值做乘算。
+    // 安全行为：不进 computed，但在 perBasis 保留结构化区间 + provenance，
+    // projection 可据此展示"估算区间，未计入"。
+    const parsed = parseNutrientValue(obs.value);
+    if (parsed && parsed.kind === "range") {
+      perBasis[nutrient.id] = {
+        value: null,
+        range: { min: parsed.min, max: parsed.max },
+        unit,
+        observationId: obs.id,
+        source: obs.source,
+        sourceId: obs.sourceId,
+        datasetVersion: obs.datasetVersion,
+        method: obs.method,
+        basisKey: basisKeyFromBasis(obs.basis),
+        evidenceId: obs.evidenceId || "",
+        note: obs.note || "",
+        excludedReason: "range_not_scalar",
+      };
+      continue;
+    }
+    const per = parsed && parsed.kind === "scalar" ? parsed.value : null;
+    if (per == null) continue;
     const val = clampNumber(per * factor, { min: 0, max: 1e12 });
     if (val == null) continue;
     computed[nutrient.id] = { value: val, unit };
@@ -1482,3 +1503,6 @@ if (process.argv[1] && path.resolve(process.argv[1]) === THIS_FILE) {
     process.exit(1);
   });
 }
+
+// Test hooks: 供 node:test 回归覆盖（nutrition-ledger-mvp#35），无运行时副作用。
+export { parseNumeric, parseNutrientValue, computeIntakeSnapshot };

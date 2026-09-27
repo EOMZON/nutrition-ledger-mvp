@@ -53,6 +53,70 @@ export function unitForNutrient(nutrientId) {
   return NUTRIENT_BY_ID[nutrientId]?.unit || "";
 }
 
+// nutrition-ledger-mvp#35: 值类型边界。观测值可能是单个数值，也可能是
+// 估算区间（"260~510" / "260 - 510" / "260–510"）。区间不得被压平成单值
+// （旧 parseNumeric 会把 "260~510" 拼成 260510），canonical data model
+// 在此表达值类型，projection 再决定展示。
+const RANGE_SEPARATOR_RE = /[~～〜﹏–—―]/;
+const NUMBER_TOKEN_RE = /-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?/g;
+
+function extractNumberTokens(raw) {
+  const tokens = [];
+  let match;
+  NUMBER_TOKEN_RE.lastIndex = 0;
+  while ((match = NUMBER_TOKEN_RE.exec(raw)) !== null) {
+    tokens.push({ text: match[0], value: Number.parseFloat(match[0]), index: match.index });
+  }
+  return tokens;
+}
+
+function looksLikeRange(raw, tokens) {
+  if (tokens.length !== 2) return false;
+  const [a, b] = tokens;
+  const between = raw.slice(a.index + a.text.length, b.index);
+  if (RANGE_SEPARATOR_RE.test(between)) return true;
+  if (/\bto\b/i.test(between)) return true;
+  if (between.includes("-")) return true;
+  // "260-510"：第二个 token 的前导 "-" 紧贴前一个数字，实际是分隔符而非负号
+  if (b.text.startsWith("-") && b.index === a.index + a.text.length) return true;
+  return false;
+}
+
+function rangeMinMax(tokens) {
+  const [a, second] = tokens;
+  let lo = a.value;
+  let hi = second.value;
+  if (second.text.startsWith("-") && second.index === a.index + a.text.length) {
+    hi = -hi; // 分隔符连字符不计为负号
+  }
+  return { min: Math.min(lo, hi), max: Math.max(lo, hi) };
+}
+
+export function parseNutrientValue(input) {
+  if (typeof input === "number") {
+    return Number.isFinite(input) ? { kind: "scalar", value: input } : { kind: "unknown" };
+  }
+  const raw = String(input ?? "").trim();
+  if (!raw) return { kind: "unknown" };
+
+  // 千分位逗号先去掉："1,200" 是单值 1200，不是两个数字。
+  const normalized = raw.replace(/,/g, "");
+  const tokens = extractNumberTokens(normalized);
+  if (tokens.length === 0 || tokens.some((t) => !Number.isFinite(t.value))) {
+    return { kind: "unknown" };
+  }
+  if (looksLikeRange(normalized, tokens)) {
+    return { kind: "range", ...rangeMinMax(tokens) };
+  }
+  if (tokens.length === 1) {
+    // 单个数值：允许 "260" / "260.5" / "260 kcal" / "约260" 等宽松写法，
+    // 但不允许把多个数字拼成一个（"260~510" 已在上面判为 range）。
+    const single = Number.parseFloat(normalized.replace(/[^\d.+-eE]/g, ""));
+    return Number.isFinite(single) ? { kind: "scalar", value: single } : { kind: "unknown" };
+  }
+  return { kind: "unknown" };
+}
+
 export function todayLocalDate(now = new Date()) {
   const date = now instanceof Date ? now : new Date(now);
   if (Number.isNaN(date.getTime())) throw new Error("invalid date");
