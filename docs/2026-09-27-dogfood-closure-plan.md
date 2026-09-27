@@ -92,3 +92,13 @@ https://github.com/EOMZON/nutrition-ledger-mvp/issues/35
 - 不重新打开 #33。
 - 不创建第二 ledger。
 - #35 先做 parser/domain 最小修复 + regression tests；若需要真实本机数据回归，再标记 本机处理。
+
+---
+## 2026-09-28 完成状态
+
+- #33：DOGFOOD PASS / CLOSED。
+- #35：PARSER + DOMAIN SAFETY + CANONICAL READBACK + EVIDENCE PASS / CLOSED。
+- #35 修复覆盖 range/scalar 边界、parser regression、intake calculation safety、provenance；live probe 证明 260~510 不再产生伪单值。
+- Nutrition 当前不再是主线执行 blocker。
+
+本文件从“待执行 dogfood”转为历史 closure record；未来 cloud persistence 与本次 dogfood 解耦，不创建第二 ledger。
