@@ -67,3 +67,28 @@ Canonical local-first writer boundary 正确；本 Issue 不升级为云端任�
 
 ### 下一动作
 **本机处理**：只执行 #33 既有 lunch ledger → readback → evidence。禁止创建第二 ledger。
+
+
+---
+## 2026-09-27 Fresh Re-audit
+
+### #33 已完成
+
+2026-09-23 lunch 已在 canonical Mac ledger 完成落盘并 readback，通过实际执行回执关闭 #33。
+
+### 新发现：#35 数据完整性修复
+
+真实 dogfood 执行发现：energy_kcal = 260~510 在当前 parseNumeric 路径可能被错误解析为 260510。
+
+本次已通过 append-only void/rebuild 隔离错误 intake，避免污染当日 totals。
+
+后续修复独立进入：
+https://github.com/EOMZON/nutrition-ledger-mvp/issues/35
+
+### 当前边界
+
+- #33：DOGFOOD_PASS / CLOSED
+- #35：PARSER_BUG_OPEN / P1
+- 不重新打开 #33。
+- 不创建第二 ledger。
+- #35 先做 parser/domain 最小修复 + regression tests；若需要真实本机数据回归，再标记 本机处理。
